@@ -2,6 +2,7 @@ import SCons
 import sys
 import glob
 import os
+import scons_compiledb
 
 resources = []
 plugins = []
@@ -13,6 +14,7 @@ Export('SCons', 'sys', 'os', 'glob', 'resources',
 
 # Configure the build framework
 env = SConscript('build/SConscript.configure')
+scons_compiledb.enable(env)
 
 Export('env')
 
@@ -92,3 +94,6 @@ build('src/tests/SConscript')
 
 # ===== Move everything to its proper place =====
 SConscript('build/SConscript.install')
+
+env.CompileDb()
+
