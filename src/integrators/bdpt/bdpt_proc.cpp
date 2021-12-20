@@ -19,8 +19,8 @@
 #include <mitsuba/core/statistics.h>
 #include <mitsuba/core/sfcurve.h>
 #include <mitsuba/bidir/util.h>
+#include <mitsuba/plt/plt.h>
 #include "bdpt_proc.h"
-#include <mitsuba/bidir/plt.h>
 
 MTS_NAMESPACE_BEGIN
 

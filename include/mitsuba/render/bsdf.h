@@ -227,23 +227,21 @@ public:
         // =============================================================
 
         /// 'null' scattering event, i.e. particles do not undergo deflection
-        ENull                 = 0x00001,
-        /// Ideally diffuse reflection
-        EDiffuseReflection    = 0x00002,
-        /// Ideally diffuse transmission
-        EDiffuseTransmission  = 0x00004,
-        /// Glossy reflection
-        EGlossyReflection     = 0x00008,
-        /// Glossy transmission
-        EGlossyTransmission   = 0x00010,
+        ENull                  = 0x00001,
+        /// Radiation that undergoes scattering
+        EScatteredReflection   = 0x00002,
+        EScatteredTransmission = 0x00004,
+        /// Radiation that is specularly reflected/refracted into discrete lobes
+        EDirectReflection      = 0x00008,
+        EDirectTransmission    = 0x00010,
         /// Reflection into a discrete set of directions
-        EDeltaReflection      = 0x00020,
-        /// Transmission into a discrete set of directions
-        EDeltaTransmission    = 0x00040,
-        /// Reflection into a 1D space of directions
-        EDelta1DReflection    = 0x00080,
-        /// Transmission into a 1D space of directions
-        EDelta1DTransmission  = 0x00100,
+        // EDeltaReflection      = 0x00020,
+        // /// Transmission into a discrete set of directions
+        // EDeltaTransmission    = 0x00040,
+        // /// Reflection into a 1D space of directions
+        // EDelta1DReflection    = 0x00080,
+        // /// Transmission into a 1D space of directions
+        // EDelta1DTransmission  = 0x00100,
 
         // =============================================================
         //!                   Other lobe attributes
@@ -265,23 +263,19 @@ public:
     /// Convenient combinations of flags from \ref EBSDFType
     enum ETypeCombinations {
         /// Any reflection component (scattering into discrete, 1D, or 2D set of directions)
-        EReflection   = EDiffuseReflection | EDeltaReflection
-            | EDelta1DReflection | EGlossyReflection,
+        EReflection   = EScatteredReflection | EDirectReflection,
         /// Any transmission component (scattering into discrete, 1D, or 2D set of directions)
-        ETransmission = EDiffuseTransmission | EDeltaTransmission
-            | EDelta1DTransmission | EGlossyTransmission | ENull,
+        ETransmission = EScatteredTransmission | EDirectTransmission | ENull,
         /// Diffuse scattering into a 2D set of directions
-        EDiffuse      = EDiffuseReflection | EDiffuseTransmission,
+        EScattered    = EScatteredReflection | EScatteredTransmission,
         /// Non-diffuse scattering into a 2D set of directions
-        EGlossy       = EGlossyReflection | EGlossyTransmission,
+        EDirect       = EDirectReflection | EDirectTransmission,
         /// Scattering into a 2D set of directions
-        ESmooth       = EDiffuse | EGlossy,
+        ESmooth       = EScattered,
         /// Scattering into a discrete set of directions
-        EDelta        = ENull | EDeltaReflection | EDeltaTransmission,
-        /// Scattering into a 1D space of directions
-        EDelta1D      = EDelta1DReflection | EDelta1DTransmission,
+        EDelta        = ENull | EDirect,
         /// Any kind of scattering
-        EAll          = EDiffuse | EGlossy | EDelta | EDelta1D
+        EAll          = EDirect | ESmooth | EDelta
     };
 
     /// Return the number of components of this BSDF
@@ -315,8 +309,8 @@ public:
             return ESolidAngle;
         } else if (componentType & EDelta) {
             return EDiscrete;
-        } else if (componentType & EDelta1D) {
-            return ELength;
+        // } else if (componentType & EDelta1D) {
+        //     return ELength;
         } else {
             Log(EError, "getMeasure(): Invalid component type!");
             return ESolidAngle; // will never be reached
