@@ -23,6 +23,9 @@
 
 MTS_NAMESPACE_BEGIN
 
+template<typename T>
+auto sqr(T t) noexcept { return t*t; }
+
 /**
  * Contains elementary 1D math functions that were either not provided by the standard,
  * or which are not consistently provided on all platforms/compilers
