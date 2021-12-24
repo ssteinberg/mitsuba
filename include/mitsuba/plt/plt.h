@@ -12,6 +12,7 @@
 #include <mitsuba/core/vector.h>
 #include <mitsuba/core/matrix.h>
 #include <mitsuba/core/spectrum.h>
+#include <mitsuba/render/shape.h>
 
 #include "mueller.h"
 
@@ -58,7 +59,11 @@ struct RadiancePacket {
         return *this;
     }
 
-    inline void rotateFrame(const Frame &toFrame) noexcept {
+    inline void rotateFrame(const Intersection &its, Frame toFrame) noexcept {
+        toFrame.n = its.toWorld(toFrame.n);
+        toFrame.s = its.toWorld(toFrame.s);
+        toFrame.t = its.toWorld(toFrame.t);
+
         const auto T = MuellerT(f, toFrame);
         for (auto& L : Ls) {
             L.l = T*L.l;
@@ -67,28 +72,20 @@ struct RadiancePacket {
 
         f = toFrame;
     }
-
-    inline void diffract() noexcept {
-
-    }
-};
-
-struct ImportancePacket {
-    std::array<Vector4,SPECTRUM_SAMPLES> ls{};
-    Frame f{};    // Reference frame
     
-    inline Spectrum spectrum() const {
-        Spectrum s;
-        for (auto i=0;i<SPECTRUM_SAMPLES;++i)
-            s[i]=ls[i][0];
-        return s;
-    }
-
-    inline ImportancePacket& operator=(const ImportancePacket& o) noexcept {
-        ls=o.ls;
-        f=o.f;
-        return *this;
-    }
+    auto& L(std::size_t s) noexcept                 { return Ls[s].l; }
+    const auto& S(std::size_t s) const noexcept     { return Ls[s].l; }
+    const auto Lx(std::size_t s) const noexcept     { return (S(s)[0]+S(s)[1]) / 2; }
+    const auto Ly(std::size_t s) const noexcept     { return (S(s)[0]-S(s)[1]) / 2; }
+    const auto Ldlp(std::size_t s) const noexcept   { return S(s)[2] / std::sqrt(Lx(s)*Ly(s)); }
+    const auto Lcp(std::size_t s) const noexcept    { return S(s)[3] / std::sqrt(Lx(s)*Ly(s)); }
+    const auto Sx(std::size_t s) const noexcept     { return Lx(s) * Vector4{ 1,1,0,0 }; }
+    const auto Sy(std::size_t s) const noexcept     { return Ly(s) * Vector4{ 1,-1,0,0 }; }
+    const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
+    
+    const auto size() const noexcept { return Ls.size(); }
+    const auto& operator[](std::size_t idx) const noexcept { return Ls[idx]; }
+    auto& operator[](std::size_t idx) noexcept { return Ls[idx]; }
 };
 
 MTS_NAMESPACE_END

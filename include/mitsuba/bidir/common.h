@@ -21,6 +21,7 @@
 #define __MITSUBA_BIDIR_COMMON_H_
 
 #include <mitsuba/render/scene.h>
+#include <mitsuba/plt/plt.h>
 
 MTS_NAMESPACE_BEGIN
 

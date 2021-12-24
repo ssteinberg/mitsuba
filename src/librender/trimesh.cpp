@@ -377,7 +377,7 @@ void TriMesh::configure() {
         2. The material explicitly requests tangents so that it can do texture filtering
     */
     if (hasBSDF() &&
-        ((m_bsdf->getType() & BSDF::EAnisotropic) || m_bsdf->usesRayDifferentials()))
+        ((m_bsdf->getType() & BSDF::EAnisotropic)))
         computeUVTangents();
 
     /* For manifold exploration: always compute UV tangents when a glossy material

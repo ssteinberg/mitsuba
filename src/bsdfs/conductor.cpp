@@ -189,11 +189,8 @@ public:
         m_specularReflectance = ensureEnergyConservation(
             m_specularReflectance, "specularReflectance", 1.0f);
 
-        m_usesRayDifferentials =
-            m_specularReflectance->usesRayDifferentials();
-
         m_components.clear();
-        m_components.push_back(EDeltaReflection | EFrontSide
+        m_components.push_back(EDirectReflection | EFrontSide
             | (m_specularReflectance->isConstant() ? 0 : ESpatiallyVarying));
 
         BSDF::configure();
@@ -209,7 +206,6 @@ public:
     void addChild(const std::string &name, ConfigurableObject *child) {
         if (child->getClass()->derivesFrom(MTS_CLASS(Texture)) && name == "specularReflectance") {
             m_specularReflectance = static_cast<Texture *>(child);
-            m_usesRayDifferentials |= m_specularReflectance->usesRayDifferentials();
         } else {
             BSDF::addChild(name, child);
         }

@@ -156,7 +156,8 @@ public:
                 sensorSubpath.vertex(i-1)->weight[ERadiance] *
                 sensorSubpath.vertex(i-1)->rrWeight *
                 sensorSubpath.edge(i-1)->weight[ERadiance];
-
+        
+        RadiancePacket radiancePacket{};
         Spectrum sampleValue(0.0f);
         for (int s = (int) emitterSubpath.vertexCount()-1; s >= 0; --s) {
             /* Determine the range of sensor vertices to be traversed,
@@ -254,12 +255,12 @@ public:
                     vs->measure = vt->measure = EArea;
                 }
 
-                /* Attempt to connect the two endpoints, which could result in
-                   the creation of additional vertices (index-matched boundaries etc.) */
-                int interactions = remaining; // backup
-                if (value.isZero() || !connectionEdge.pathConnectAndCollapse(
-                        scene, vsEdge, vs, vt, vtEdge, interactions))
-                    continue;
+                /* /1* Attempt to connect the two endpoints, which could result in */
+                /*    the creation of additional vertices (index-matched boundaries etc.) *1/ */
+                /* int interactions = remaining; // backup */
+                /* if (value.isZero() || !connectionEdge.pathConnectAndCollapse( */
+                /*         scene, vsEdge, vs, vt, vtEdge, interactions)) */
+                /*     continue; */
 
                 /* Account for the terms of the measurement contribution
                    function that are coupled to the connection edge */

@@ -212,12 +212,12 @@ void PathSampler::sampleSplats(const Point2i &offset, SplatList &list) {
 
                         /* Attempt to connect the two endpoints, which could result in
                            the creation of additional vertices (index-matched boundaries etc.) */
-                        int interactions = remaining;
-                        if (value.isZero() || !connectionEdge.pathConnectAndCollapse(
-                                m_scene, vsEdge, vs, vt, vtEdge, interactions))
-                            continue;
+                        /* int interactions = remaining; */
+                        /* if (value.isZero() || !connectionEdge.pathConnectAndCollapse( */
+                        /*         m_scene, vsEdge, vs, vt, vtEdge, interactions)) */
+                        /*     continue; */
 
-                        depth += interactions;
+                        /* depth += interactions; */
 
                         if (m_excludeDirectIllum && depth <= 2)
                             continue;

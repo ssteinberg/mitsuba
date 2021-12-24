@@ -155,7 +155,8 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                 /* Sample the BSDF */
                 BSDFSamplingRecord bRec(its, sampler, mode);
                 bRec.wi = its.toLocal(wi);
-                weight[mode] = bsdf->sample(bRec, pdf[mode], sampler->next2D());
+                weight[mode] = bsdf->sample(bRec, sampler->next2D());
+                pdf[mode]    = bsdf->pdf(bRec);
                 if (weight[mode].isZero())
                     return false;
 
@@ -197,16 +198,7 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                     return false;
                 }
 
-                if (!(bsdf->getType() & BSDF::ENonSymmetric)) {
-                    /* Make use of symmetry -- no need to re-evaluate
-                       everything (only the pdf and cosine factors changed) */
-                    weight[1-mode] = weight[mode] * (pdf[mode] / pdf[1-mode]);
-                    if (measure == ESolidAngle)
-                        weight[1-mode] *=
-                            std::abs(Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRec.wi));
-                } else {
-                    weight[1-mode] = bsdf->eval(bRec, (EMeasure) measure) / pdf[1-mode];
-                }
+                weight[1-mode] = bsdf->eval(bRec, (EMeasure) measure) / pdf[1-mode];
                 bRec.reverse();
 
                 /* Adjoint BSDF for shading normals */
@@ -596,15 +588,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
                     /* This can happen rarely due to roundoff errors -- be strict */
                     return false;
                 }
-                if (!(bsdf->getType() & BSDF::ENonSymmetric)) {
-                    /* Make use of symmetry -- no need to re-evaluate
-                       everything (only the pdf and cosine factors changed) */
-                    weight[1-mode] = weight[mode] * std::abs(
-                        (pdf[mode] * Frame::cosTheta(bRec.wo)) /
-                        (pdf[1-mode] * Frame::cosTheta(bRec.wi)));
-                } else {
-                    weight[1-mode] = bsdf->eval(bRec, ESolidAngle) / pdf[1-mode];
-                }
+                weight[1-mode] = bsdf->eval(bRec, ESolidAngle) / pdf[1-mode];
                 bRec.reverse();
 
                 /* Adjoint BSDF for shading normals */
@@ -752,10 +736,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
         return false;
     }
 
-    if (!(bsdf->getType() & BSDF::ENonSymmetric))
-        weight[1-mode] = weight[mode];
-    else
-        weight[1-mode] = bsdf->eval(bRec, EDiscrete) / pdf[1-mode];
+    weight[1-mode] = bsdf->eval(bRec, EDiscrete) / pdf[1-mode];
     bRec.reverse();
 
     /* Adjoint BSDF for shading normals */

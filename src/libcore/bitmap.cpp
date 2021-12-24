@@ -263,7 +263,7 @@ extern "C" {
         p->mgr.free_in_buffer = 0;
     }
 
-    METHODDEF(void) jpeg_error_exit (j_common_ptr cinfo) throw(std::runtime_error) {
+    METHODDEF(void) jpeg_error_exit (j_common_ptr cinfo) {
         char msg[JMSG_LENGTH_MAX];
         (*cinfo->err->format_message) (cinfo, msg);
         SLog(EError, "Critcal libjpeg error: %s", msg);

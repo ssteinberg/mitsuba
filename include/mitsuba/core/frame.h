@@ -51,6 +51,24 @@ struct Frame {
      : s(x), t(y), n(z) {
     }
 
+    /// Construct a new sp-coordinate frame
+    inline static Frame spframe(const Vector &wo, const Normal &n) {
+        Frame f;
+        f.n = n;
+
+        const auto &c = cross(wo,n);
+        const auto lc = c.lengthSquared();
+        if (lc<1e-10) {
+            coordinateSystem(n, f.s, f.t);
+        }
+        else {
+            f.s = c/std::sqrt(lc);
+            f.t = cross(f.s,wo);
+        }
+
+        return f;
+    }
+
     /// Construct a new coordinate frame from a single vector
     inline Frame(const Vector &n) : n(n) {
         coordinateSystem(n, s, t);

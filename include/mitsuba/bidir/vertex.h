@@ -17,6 +17,7 @@
 */
 
 #pragma once
+#include "mitsuba/plt/plt.h"
 #if !defined(__MITSUBA_BIDIR_VERTEX_H_)
 #define __MITSUBA_BIDIR_VERTEX_H_
 
@@ -272,7 +273,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
     bool sampleNext(const Scene *scene, Sampler *sampler,
         const PathVertex *pred, const PathEdge *predEdge,
         PathEdge *succEdge, PathVertex *succ,
-        ETransportMode mode, bool russianRoulette = false,
+        ETransportMode mode, bool russianRoulette = false, 
         Spectrum *throughput = NULL);
 
     /**
@@ -602,7 +603,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
      */
     inline bool isDiffuseInteraction() const {
         return type == ESurfaceInteraction &&
-            (componentType == BSDF::EDiffuseReflection || componentType == BSDF::EDiffuseTransmission);
+            (componentType == BSDF::EScatteredReflection || componentType == BSDF::EScatteredTransmission);
     }
 
     /**

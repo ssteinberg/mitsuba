@@ -96,9 +96,8 @@ public:
 
         m_components.clear();
         if (m_reflectance->getMaximum().max() > 0)
-            m_components.push_back(EDiffuseReflection | EFrontSide
+            m_components.push_back(EScatteredReflection | EFrontSide
                 | (m_reflectance->isConstant() ? 0 : ESpatiallyVarying));
-            m_usesRayDifferentials = m_reflectance->usesRayDifferentials();
 
         BSDF::configure();
     }
@@ -107,45 +106,62 @@ public:
         return m_reflectance->eval(its);
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || measure != ESolidAngle
+    Spectrum eval(const BSDFSamplingRecord &bRec, 
+        EMeasure measure) const {
+        if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
             return Spectrum(0.0f);
-
-        return m_reflectance->eval(bRec.its)
-            * (INV_PI * Frame::cosTheta(bRec.wo));
+        
+        const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        
+        return costheta_o * m00;
     }
 
-    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || measure != ESolidAngle
+    Spectrum eval(const BSDFSamplingRecord &bRec, 
+        RadiancePacket &radiancePacket,
+        EMeasure measure) const {
+        Assert(bRec.mode==ERadiance);
+
+        if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
+            || Frame::cosTheta(bRec.wi) <= 0
+            || Frame::cosTheta(bRec.wo) <= 0)
+            return Spectrum(0.0f);
+        
+        const auto& fout = Frame::spframe(bRec.wo,Normal{ 0,0,1 });
+
+        const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
+        const auto M = Float(1);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        
+        radiancePacket.rotateFrame(bRec.its, fout);
+        for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
+            radiancePacket.L(idx) = 
+                costheta_o * m00[idx] * M * radiancePacket.S(idx);
+        }
+
+        return costheta_o * m00;
+    }
+
+    Float pdf(const BSDFSamplingRecord &bRec, 
+        EMeasure measure) const {
+        if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
             return 0.0f;
-
         return warp::squareToCosineHemispherePdf(bRec.wo);
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || Frame::cosTheta(bRec.wi) <= 0)
+    Spectrum sample(BSDFSamplingRecord &bRec, 
+        const Point2 &sample) const {
+        if (!(bRec.typeMask & EScatteredReflection) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
 
         bRec.wo = warp::squareToCosineHemisphere(sample);
         bRec.eta = 1.0f;
         bRec.sampledComponent = 0;
-        bRec.sampledType = EDiffuseReflection;
-        return m_reflectance->eval(bRec.its);
-    }
-
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || Frame::cosTheta(bRec.wi) <= 0)
-            return Spectrum(0.0f);
-
-        bRec.wo = warp::squareToCosineHemisphere(sample);
-        bRec.eta = 1.0f;
-        bRec.sampledComponent = 0;
-        bRec.sampledType = EDiffuseReflection;
-        pdf = warp::squareToCosineHemispherePdf(bRec.wo);
+        bRec.sampledType = EScatteredReflection;
         return m_reflectance->eval(bRec.its);
     }
 

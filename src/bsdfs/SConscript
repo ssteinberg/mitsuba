@@ -30,8 +30,8 @@ plugins += env.SharedLibrary('diffuse', ['diffuse.cpp'])
 
 # The Irawan-Marschner plugin uses a Boost::Spirit parser, which makes it
 # pretty heavy stuff to compile. Go easy on the compiler flags:
-irawanEnv = env.Clone()
-irawanEnv.RelaxCompilerSettings()
-plugins += irawanEnv.SharedLibrary('irawan', ['irawan.cpp'])
+# irawanEnv = env.Clone()
+# irawanEnv.RelaxCompilerSettings()
+# plugins += irawanEnv.SharedLibrary('irawan', ['irawan.cpp'])
 
 Export('plugins')

@@ -25,6 +25,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/common.h>
 #include <mitsuba/render/shader.h>
+#include <mitsuba/plt/plt.h>
 
 MTS_NAMESPACE_BEGIN
 
@@ -251,7 +252,7 @@ public:
         /// The BSDF depends on the UV coordinates
         ESpatiallyVarying     = 0x02000,
         /// Flags non-symmetry (e.g. transmission in dielectric materials)
-        ENonSymmetric         = 0x04000,
+        /* ENonSymmetric         = 0x04000, */
         /// Supports interactions on the front-facing side
         EFrontSide            = 0x08000,
         /// Supports interactions on the back-facing side
@@ -322,11 +323,6 @@ public:
         return (type & m_combinedType) != 0;
     }
 
-    /// Return whether this BSDF makes use of ray differentials
-    inline bool usesRayDifferentials() const {
-        return m_usesRayDifferentials;
-    }
-
     /// Return the diffuse reflectance value (if any)
     virtual Spectrum getDiffuseReflectance(const Intersection &its) const;
 
@@ -336,34 +332,7 @@ public:
     }
 
     /**
-     * \brief Sample the BSDF and return the importance weight (i.e. the
-     * value of the BSDF divided by the probability density of the sample).
-     *
-     * When the probability density is not explicitly required, this function
-     * should be preferred, since it is potentially faster by making use of
-     * cancellations during the division.
-     *
-     * If a component mask or a specific component index is specified, the
-     * sample is drawn from the matching component, if it exists. Depending
-     * on the provided transport type, either the BSDF or its adjoint version
-     * is used.
-     *
-     * \param bRec    A BSDF query record
-     * \param sample  A uniformly distributed sample on \f$[0,1]^2\f$
-     *
-     * \return The BSDF value divided by the probability density of the sample
-     *         sample (multiplied by the cosine foreshortening factor when a
-     *         non-delta component is sampled) A zero spectrum means that
-     *         sampling failed.
-     *
-     * \remark This function is not exposed by the Python API. See the other
-     *         sample function instead.
-     *
-     */
-    virtual Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const = 0;
-
-    /**
-     * \brief Sample the BSDF and return the probability density \a and the
+     * \brief Sample the BSDF and return the
      * importance weight of the sample (i.e. the value of the BSDF divided
      * by the probability density)
      *
@@ -378,18 +347,16 @@ public:
      *
      * \param bRec    A BSDF query record
      * \param sample  A uniformly distributed sample on \f$[0,1]^2\f$
-     * \param pdf     Will record the probability with respect to solid angles
-     *                (or the discrete probability when a delta component is sampled)
      *
      * \return The BSDF value (multiplied by the cosine foreshortening
      *         factor when a non-delta component is sampled). A zero spectrum
      *         means that sampling failed.
-     *
-     * \remark From Python, this function is is called using the syntax
-     *         <tt>value, pdf = bsdf.sample(bRec, sample)</tt>
      */
-    virtual Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf,
+    virtual Spectrum sample(BSDFSamplingRecord &bRec,
         const Point2 &sample) const = 0;
+    
+    virtual Float pdf(const BSDFSamplingRecord &bRec,
+        EMeasure measure = ESolidAngle) const = 0;
 
     /**
      * \brief Evaluate the BSDF f(wi, wo) or its adjoint version f^{*}(wi, wo)
@@ -410,28 +377,9 @@ public:
      */
     virtual Spectrum eval(const BSDFSamplingRecord &bRec,
         EMeasure measure = ESolidAngle) const = 0;
-
-    /**
-     * \brief Compute the probability of sampling \c bRec.wo (given
-     * \c bRec.wi).
-     *
-     * This method provides access to the probability density that
-     * would result when supplying the same BSDF query record to the
-     * \ref sample() method. It correctly handles changes in probability
-     * when only a subset of the components is chosen for sampling
-     * (this can be done using the \ref BSDFSamplingRecord::component and
-     * \ref BSDFSamplingRecord::typeMask fields).
-     *
-     * \param bRec
-     *     A record with detailed information on the BSDF query
-     *
-     * \param measure
-     *     Specifies the measure of the component. This is necessary
-     *     to handle BSDFs, whose components live on spaces with
-     *     different measures. (E.g. a diffuse material with an
-     *     ideally smooth dielectric coating).
-     */
-    virtual Float pdf(const BSDFSamplingRecord &bRec,
+    
+    virtual Spectrum eval(const BSDFSamplingRecord &bRec,
+        RadiancePacket &radiancePacket,
         EMeasure measure = ESolidAngle) const = 0;
 
     /**
@@ -532,7 +480,6 @@ protected:
 protected:
     std::vector<unsigned int> m_components;
     unsigned int m_combinedType;
-    bool m_usesRayDifferentials;
     bool m_ensureEnergyConservation;
 };
 
