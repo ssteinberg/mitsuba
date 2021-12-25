@@ -375,7 +375,7 @@ public:
      *     different measures. (E.g. a diffuse material with an
      *     ideally smooth dielectric coating).
      */
-    virtual Spectrum eval(const BSDFSamplingRecord &bRec,
+    virtual Spectrum envelope(const BSDFSamplingRecord &bRec,
         EMeasure measure = ESolidAngle) const = 0;
     
     virtual Spectrum eval(const BSDFSamplingRecord &bRec,

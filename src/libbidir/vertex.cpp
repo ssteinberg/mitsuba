@@ -198,7 +198,7 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                     return false;
                 }
 
-                weight[1-mode] = bsdf->eval(bRec, (EMeasure) measure) / pdf[1-mode];
+                weight[1-mode] = bsdf->envelope(bRec, (EMeasure) measure) / pdf[1-mode];
                 bRec.reverse();
 
                 /* Adjoint BSDF for shading normals */
@@ -545,7 +545,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
 
                 BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), mode);
 
-                Spectrum value = bsdf->eval(bRec);
+                Spectrum value = bsdf->envelope(bRec);
                 Float prob = bsdf->pdf(bRec);
 
                 if (value.isZero() || prob <= RCPOVERFLOW)
@@ -588,7 +588,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
                     /* This can happen rarely due to roundoff errors -- be strict */
                     return false;
                 }
-                weight[1-mode] = bsdf->eval(bRec, ESolidAngle) / pdf[1-mode];
+                weight[1-mode] = bsdf->envelope(bRec, ESolidAngle) / pdf[1-mode];
                 bRec.reverse();
 
                 /* Adjoint BSDF for shading normals */
@@ -700,7 +700,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
         return false;
     }
 
-    weight[mode] = bsdf->eval(bRec, EDiscrete) / prob;
+    weight[mode] = bsdf->envelope(bRec, EDiscrete) / prob;
     pdf[mode] = prob;
     measure = EDiscrete;
     componentType = componentType_;
@@ -736,7 +736,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
         return false;
     }
 
-    weight[1-mode] = bsdf->eval(bRec, EDiscrete) / pdf[1-mode];
+    weight[1-mode] = bsdf->envelope(bRec, EDiscrete) / pdf[1-mode];
     bRec.reverse();
 
     /* Adjoint BSDF for shading normals */
@@ -842,7 +842,7 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 if (measure == EArea)
                     measure = ESolidAngle;
 
-                result = bsdf->eval(bRec, measure);
+                result = bsdf->envelope(bRec, measure);
 
                 /* Prevent light leaks due to the use of shading normals */
                 Float wiDotGeoN = dot(its.geoFrame.n, wi),

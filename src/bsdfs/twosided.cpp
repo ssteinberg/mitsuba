@@ -87,10 +87,6 @@ public:
         if (!m_nestedBRDF[1])
             m_nestedBRDF[1] = m_nestedBRDF[0];
 
-
-        m_usesRayDifferentials = m_nestedBRDF[0]->usesRayDifferentials()
-            || m_nestedBRDF[1]->usesRayDifferentials();
-
         m_components.clear();
 
         for (int i=0; i<m_nestedBRDF[0]->getComponentCount(); ++i)
@@ -105,17 +101,33 @@ public:
                 "a transmission component can be nested!");
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
+    Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         BSDFSamplingRecord b(bRec);
-
         if (Frame::cosTheta(b.wi) > 0) {
-            return m_nestedBRDF[0]->eval(b, measure);
+            return m_nestedBRDF[0]->envelope(b, measure);
         } else {
             if (b.component != -1)
                 b.component -= m_nestedBRDF[0]->getComponentCount();
             b.wi.z *= -1;
             b.wo.z *= -1;
-            return m_nestedBRDF[1]->eval(b, measure);
+            return m_nestedBRDF[1]->envelope(b, measure);
+        }
+    }
+
+    Spectrum eval(const BSDFSamplingRecord &bRec, 
+        RadiancePacket &radiancePacket,
+        EMeasure measure) const {
+        Assert(bRec.mode==ERadiance);
+
+        BSDFSamplingRecord b(bRec);
+        if (Frame::cosTheta(b.wi) > 0) {
+            return m_nestedBRDF[0]->eval(b, radiancePacket, measure);
+        } else {
+            if (b.component != -1)
+                b.component -= m_nestedBRDF[0]->getComponentCount();
+            b.wi.z *= -1;
+            b.wo.z *= -1;
+            return m_nestedBRDF[1]->eval(b, radiancePacket, measure);
         }
     }
 
@@ -155,30 +167,6 @@ public:
             }
         }
 
-        return result;
-    }
-
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        bool flipped = false;
-        if (Frame::cosTheta(bRec.wi) < 0) {
-            bRec.wi.z *= -1;
-            flipped = true;
-            if (bRec.component != -1)
-                bRec.component -= m_nestedBRDF[0]->getComponentCount();
-        }
-
-        Spectrum result = m_nestedBRDF[flipped ? 1 : 0]->sample(bRec, pdf, sample);
-
-        if (flipped) {
-            bRec.wi.z *= -1;
-
-            if (bRec.component != -1)
-                bRec.component += m_nestedBRDF[0]->getComponentCount();
-            if (!result.isZero() && pdf != 0) {
-                bRec.wo.z *= -1;
-                bRec.sampledComponent += m_nestedBRDF[0]->getComponentCount();
-            }
-        }
         return result;
     }
 

@@ -34,6 +34,8 @@
 #if defined(_MSC_VER)
 #pragma warning(disable : 4231) // nonstandard extension used : 'extern' before template explicit instantiation
 #endif
+#include <ImfInt64.h>
+#include <ImfFrameBuffer.h>
 #include <ImfInputFile.h>
 #include <ImfStandardAttributes.h>
 #include <ImfRgbaYca.h>

@@ -392,7 +392,7 @@ bool PathEdge::pathConnect(const Scene *scene, const PathEdge *predEdge,
             vertex->componentType = BSDF::ENull;
             vertex->pdf[EImportance] = vertex->pdf[ERadiance] = nullPdf;
             vertex->weight[EImportance] = vertex->weight[ERadiance]
-                = bsdf->eval(bRec, EDiscrete) / nullPdf;
+                = bsdf->envelope(bRec, EDiscrete) / nullPdf;
             vertex->rrWeight = 1.0f;
             vertex->getIntersection() = its;
             result.append(vertex);

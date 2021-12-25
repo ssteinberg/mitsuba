@@ -106,8 +106,7 @@ public:
         return m_reflectance->eval(its);
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, 
-        EMeasure measure) const {
+    Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
@@ -144,8 +143,7 @@ public:
         return costheta_o * m00;
     }
 
-    Float pdf(const BSDFSamplingRecord &bRec, 
-        EMeasure measure) const {
+    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
@@ -153,8 +151,7 @@ public:
         return warp::squareToCosineHemispherePdf(bRec.wo);
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, 
-        const Point2 &sample) const {
+    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
         if (!(bRec.typeMask & EScatteredReflection) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
 

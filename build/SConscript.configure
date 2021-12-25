@@ -188,9 +188,9 @@ if not conf.CheckCHeader(['stdio.h', 'jpeglib.h']):
 else:
         env.Append(CPPDEFINES = [['MTS_HAS_LIBJPEG', 1]] )
 
-if not conf.CheckCXXHeader('ImfRgba.h'):
-        print('OpenEXR is missing (install libopenexr-dev for OpenEXR I/O support)')
-else:
+#if not conf.CheckCXXHeader('ImfRgba.h'):
+#        print('OpenEXR is missing (install libopenexr-dev for OpenEXR I/O support)')
+#else:
         env.Append(CPPDEFINES = [['MTS_HAS_OPENEXR', 1]] )
 
 if not conf.CheckCXXHeader('xercesc/dom/DOMLSParser.hpp'):
