@@ -361,6 +361,55 @@ struct MTS_EXPORT_BIDIR PathEdge {
         const PathVertex *vs, Path &result, const PathVertex *vt,
         const PathEdge *succEdge, int maxInteractions, MemoryPool &pool);
 
+    /**
+     * \brief Create a connection path between two vertices and
+     * collapse it into a single edge that summarizes its properties
+     *
+     * This function can be thought of as being half-way in between
+     * \c connect() and \c pathConnect(). Like \c pathConnect(), it
+     * potentially generates an entire connection path between the
+     * specified endpoints, where intermediate vertices are
+     * either index-matched medium transitions or other surface
+     * scattering events of type \ref BSDF::ENull.
+     *
+     * This is important to support efficient direct illumination sampling
+     * through such surfaces (e.g. a heterogeneous medium or a leaf with
+     * textured alpha transparency).
+     *
+     * However, this variant does not return the intermediate vertices
+     * and edges -- instead, everything is collapsed into a single
+     * edge that captures the aggregate weight and probability densities.
+     *
+     * This function is used by bidirectional path tracing, since it creates
+     * connections through index-matched boundaries but does not require
+     * explicit knowledge about the associated path vertices.
+     *
+     * \param scene
+     *     Pointer to the underlying scene
+     * \param predEdge
+     *     Pointer to an edge between \c vs and its predecessor
+     *     (which is not needed by this function)
+     * \param vs
+     *     First path vertex to be connected.
+     * \param vt
+     *     Second path vertex to be connected.
+     * \param succEdge
+     *     Pointer to an edge between \c vt and its successor
+     *     (which is not needed by this function)
+     * \param interactions
+     *    Specifies the maximum permissible number of index-matched medium
+     *    transitions or \ref BSDF::ENull scattering events on the way
+     *    to the light source. (<tt>interactions<0</tt> means arbitrarily many).
+     *    When the function is successful, this parameter will
+     *    additionally be used to return the actual number of intermediate
+     *    interactions.
+     * \return \c true upon success, \c false when there is no
+     *     throughput or an inconsistency has been detected.
+     */
+    bool pathConnectAndCollapse(const Scene *scene, const PathEdge *predEdge,
+        const PathVertex *vs, const PathVertex *vt,
+        const PathEdge *succEdge, int &interactions);
+
     /// Create a deep copy of this edge
     PathEdge *clone(MemoryPool &pool) const;
 

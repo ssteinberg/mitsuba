@@ -119,9 +119,9 @@ public:
     }
 
     Spectrum eval(const BSDFSamplingRecord &bRec, 
-        RadiancePacket &radiancePacket,
+        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
         EMeasure measure) const {
-        Assert(bRec.mode==ERadiance);
+        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
 
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0

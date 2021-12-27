@@ -476,8 +476,14 @@ struct MTS_EXPORT_BIDIR PathVertex {
      *     defined on spaces with different measures.
      * \return The contribution weighting factor
      */
+    Spectrum envelope(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, ETransportMode mode, 
+        EMeasure measure = EArea) const;
+    
     Spectrum eval(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure = EArea) const;
+        const PathVertex *succ, 
+        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        EMeasure measure = EArea) const;
 
     /**
      * \brief Compute the density of a successor node

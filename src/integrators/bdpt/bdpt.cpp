@@ -137,9 +137,12 @@ public:
         /* Load the parameters / defaults */
         m_config.maxDepth = props.getInteger("maxDepth", -1);
         m_config.rrDepth = props.getInteger("rrDepth", 5);
-        m_config.lightImage = props.getBoolean("lightImage", true);
-        m_config.sampleDirect = props.getBoolean("sampleDirect", true);
+        m_config.lightImage = props.getBoolean("lightImage", false);
+        m_config.sampleDirect = props.getBoolean("sampleDirect", false);
         m_config.showWeighted = props.getBoolean("showWeighted", false);
+        m_config.pltCtx.Omega = props.getFloat("Omega");
+        m_config.pltCtx.A = props.getFloat("A");
+        m_config.pltCtx.sigma_zz = props.getFloat("sigma_zz");
 
         #if BDPT_DEBUG == 1
         if (m_config.maxDepth == -1 || m_config.maxDepth > 6) {

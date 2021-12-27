@@ -379,7 +379,7 @@ public:
         EMeasure measure = ESolidAngle) const = 0;
     
     virtual Spectrum eval(const BSDFSamplingRecord &bRec,
-        RadiancePacket &radiancePacket,
+        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
         EMeasure measure = ESolidAngle) const = 0;
 
     /**

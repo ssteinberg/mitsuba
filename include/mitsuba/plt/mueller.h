@@ -5,9 +5,13 @@
 
 #pragma once
 
+#include "mitsuba/core/math.h"
 #include "mitsuba/core/vector.h"
+#include <cmath>
 #include <mitsuba/core/frame.h>
 #include <mitsuba/core/matrix.h>
+
+#include <cassert>
 
 MTS_NAMESPACE_BEGIN
 
@@ -26,7 +30,7 @@ inline Matrix4x4 MuellerT(const Frame &f1, const Frame &f2) {
     }
     
     const auto sint2 = 1-cost*cost;
-    const auto sint  = sqrt(sint2);
+    const auto sint  = math::safe_sqrt(sint2);
     const auto rx    = 2*sint*cost;
     const auto ry    = 1-2*sint2;
     
