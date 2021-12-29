@@ -16,6 +16,8 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/plt/plt.h"
+#include "mitsuba/render/common.h"
 #include <mitsuba/bidir/path.h>
 #include <mitsuba/core/statistics.h>
 
@@ -893,11 +895,80 @@ Spectrum PathVertex::envelope(const Scene *scene, const PathVertex *pred,
     return result;
 }
 
+bool PathVertex::update(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, 
+        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        ETransportMode noninteraction_mode,
+        Spectrum *evalResult, EMeasure measure) {
+    // Update radiance packet
+    const auto result = eval(scene, pred, succ, radiancePacket, pltCtx, measure);
+
+    if (!isSurfaceInteraction() && !isMediumInteraction()) {
+        if (noninteraction_mode==EImportance) {
+            if (evalResult)
+                *evalResult *= envelope(scene, pred, succ, EImportance);
+            return update(scene, pred, succ, EImportance, measure);
+        }
+        else {
+            if (evalResult)
+                *evalResult *= envelope(scene, succ, pred, ERadiance);
+            return update(scene, succ, pred, ERadiance, measure);
+        }
+    }
+
+    const auto mode = ERadiance;
+    pdf[mode]       = evalPdf(scene, pred, succ, mode, measure);
+    pdf[1-mode]     = evalPdf(scene, succ, pred, (ETransportMode) (1-mode), measure);
+    weight[mode]    = result;
+    weight[1-mode]  = result;
+
+    if (evalResult)
+        *evalResult *= weight[mode];
+    if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
+        return false;
+
+    Float weightFwd = pdf[mode]   <= RCPOVERFLOW ? 0 : 1 / pdf[mode],
+          weightBkw = pdf[1-mode] <= RCPOVERFLOW ? 0 : 1 / pdf[1-mode];
+
+    this->measure = measure;
+
+    if (!isSupernode() && measure == EArea) {
+        if (!pred->isSupernode()) {
+            Vector d = pred->getPosition() - getPosition();
+            Float invDistSqr = 1.0f / d.lengthSquared();
+            weightBkw *= invDistSqr;
+            d *= std::sqrt(invDistSqr);
+            if (isOnSurface() && isConnectable())
+                weightBkw *= absDot(getShadingNormal(), d);
+            if (pred->isOnSurface())
+                weightBkw *= absDot(pred->getGeometricNormal(), d);
+        }
+
+        if (!succ->isSupernode()) {
+            Vector d = succ->getPosition() - getPosition();
+            Float invDistSqr = 1.0f / d.lengthSquared();
+            weightFwd *= invDistSqr;
+            d *= std::sqrt(invDistSqr);
+            if (isOnSurface() && isConnectable())
+                weightFwd *= absDot(getShadingNormal(), d);
+            if (succ->isOnSurface())
+                weightFwd *= absDot(succ->getGeometricNormal(), d);
+        }
+        if (isSurfaceInteraction())
+            componentType = BSDF::ESmooth;
+    }
+
+    weight[mode]   *= weightFwd;
+    weight[1-mode] *= weightBkw;
+
+    return true;
+}
+
 Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
         RadiancePacket *radiancePacket, const PLTContext &pltCtx,
         EMeasure measure) const {
-    Spectrum result(0.0f);
+    Spectrum result(.0f);
     Vector wo(0.0f);
     
     if (type != EEmitterSupernode && type != EEmitterSample) {
@@ -912,21 +983,23 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
 
     switch (type) {
         case EEmitterSupernode: {
-                if (pred != NULL || succ->type != EEmitterSample)
-                    return Spectrum(0.0f);
+                if (!!pred || succ->type != EEmitterSample)
+                    return Spectrum(.0f);
                 PositionSamplingRecord pRec = succ->getPositionSamplingRecord();
                 const Emitter *emitter = static_cast<const Emitter *>(pRec.object);
                 pRec.measure = measure;
-                return emitter->evalPosition(pRec);
+                result = emitter->evalPosition(pRec);
+
+                *radiancePacket = sourceLight(result, pltCtx);
             }
             break;
 
         case ESensorSupernode:
-                return Spectrum(0.0f);
+                return Spectrum(.0f);
 
         case EEmitterSample: {
                 if (pred->type != EEmitterSupernode)
-                    return Spectrum(0.0f);
+                    return Spectrum(.0f);
                 
                 const auto target = succ->getPosition();
                 const PositionSamplingRecord &pRec = getPositionSamplingRecord();
@@ -938,13 +1011,14 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 if (measure != EDiscrete && dp != 0)
                     result /= dp;
 
-                *radiancePacket = sourceLight(wo, result, pltCtx);
+                radiancePacket->setFrame(wo);
+                *radiancePacket *= result;
             }
             break;
 
         case ESensorSample: {
                 if (succ->type != ESensorSupernode)
-                    return Spectrum(0.0f);
+                    return Spectrum(.0f);
 
                 const auto target = pred->getPosition();
                 const PositionSamplingRecord &pRec = getPositionSamplingRecord();
@@ -956,7 +1030,7 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 if (measure != EDiscrete && dp != 0)
                     result /= dp;
 
-                return result;
+                *radiancePacket *= result;
             }
             break;
 
@@ -976,24 +1050,31 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 if (measure == EArea)
                     measure = ESolidAngle;
 
-                result = bsdf->eval(bRec, *radiancePacket, pltCtx, measure);
-
                 /* Prevent light leaks due to the use of shading normals */
                 Float wiDotGeoN = dot(its.geoFrame.n, wi),
                       woDotGeoN = dot(its.geoFrame.n, wo);
 
                 if (wiDotGeoN * Frame::cosTheta(bRec.wi) <= 0 ||
                     woDotGeoN * Frame::cosTheta(bRec.wo) <= 0)
-                    return Spectrum(0.0f);
+                    return Spectrum(.0f);
+
+                result = bsdf->eval(bRec, *radiancePacket, pltCtx, measure);
+                
+                auto terms = std::abs(
+                    (Frame::cosTheta(bRec.wi) * woDotGeoN) /
+                    (Frame::cosTheta(bRec.wo) * wiDotGeoN));
 
                 if (measure != EDiscrete && Frame::cosTheta(bRec.wo) != 0)
-                    result /= std::abs(Frame::cosTheta(bRec.wo));
+                    terms /= std::abs(Frame::cosTheta(bRec.wo));
+                
+                result *= terms;
+                *radiancePacket *= terms;
             }
             break;
 
         case EMediumInteraction: {
                 if (measure != ESolidAngle && measure != EArea)
-                    return Spectrum(0.0f);
+                    return Spectrum(.0f);
 
                 const MediumSamplingRecord &mRec = getMediumSamplingRecord();
 
@@ -1007,13 +1088,14 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 PhaseFunctionSamplingRecord pRec(mRec, wi, wo, ERadiance);
 
                 result = mRec.sigmaS * phase->eval(pRec);
+                *radiancePacket *= result;
             }
             break;
 
         default:
             SLog(EError, "PathVertex::eval(): Encountered an "
                 "unsupported vertex type (%i)!", type);
-            return Spectrum(0.0f);
+            return Spectrum(.0f);
     }
 
     return result;

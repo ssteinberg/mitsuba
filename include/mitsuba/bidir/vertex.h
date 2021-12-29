@@ -18,6 +18,7 @@
 
 #pragma once
 #include "mitsuba/plt/plt.h"
+#include "mitsuba/render/common.h"
 #if !defined(__MITSUBA_BIDIR_VERTEX_H_)
 #define __MITSUBA_BIDIR_VERTEX_H_
 
@@ -484,6 +485,12 @@ struct MTS_EXPORT_BIDIR PathVertex {
         const PathVertex *succ, 
         RadiancePacket *radiancePacket, const PLTContext &pltCtx,
         EMeasure measure = EArea) const;
+
+    bool update(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, 
+        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        ETransportMode noninteraction_mode,
+        Spectrum *evalResult = nullptr, EMeasure measure = EArea);
 
     /**
      * \brief Compute the density of a successor node

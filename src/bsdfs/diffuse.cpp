@@ -16,6 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/plt/plt.h"
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/hw/basicshader.h>
@@ -112,7 +113,7 @@ public:
             || Frame::cosTheta(bRec.wo) <= 0)
             return Spectrum(0.0f);
         
-        const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
+        const auto m00 = m_reflectance->eval(bRec.its);
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         
         return costheta_o * m00;
@@ -125,8 +126,8 @@ public:
 
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
-            || Frame::cosTheta(bRec.wo) <= 0)
-            return Spectrum(0.0f);
+            || Frame::cosTheta(bRec.wo) <= 0) 
+            return Spectrum(.0f);
         
         const auto& fout = Frame::spframe(bRec.wo,Normal{ 0,0,1 });
 
@@ -134,13 +135,17 @@ public:
         const auto M = Float(1);
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         
+        Spectrum result = radiancePacket.spectrum();
         radiancePacket.rotateFrame(bRec.its, fout);
         for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
             radiancePacket.L(idx) = 
                 costheta_o * m00[idx] * M * radiancePacket.S(idx);
+
+            if (result[idx]>RCPOVERFLOW)
+                result[idx]=radiancePacket.L(idx)[0]/result[idx];
         }
 
-        return costheta_o * m00;
+        return result;
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {

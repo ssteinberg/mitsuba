@@ -137,7 +137,7 @@ public:
         /* Load the parameters / defaults */
         m_config.maxDepth = props.getInteger("maxDepth", -1);
         m_config.rrDepth = props.getInteger("rrDepth", 5);
-        m_config.lightImage = props.getBoolean("lightImage", false);
+        m_config.lightImage = props.getBoolean("lightImage", true);
         m_config.sampleDirect = props.getBoolean("sampleDirect", false);
         m_config.showWeighted = props.getBoolean("showWeighted", false);
         m_config.pltCtx.Omega = props.getFloat("Omega");

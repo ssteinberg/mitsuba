@@ -72,6 +72,9 @@ struct RadiancePacket {
                            its.toWorld(toFrame.t),
                            its.toWorld(toFrame.n) });
     }
+    inline void setFrame(const Vector &dir) noexcept {
+        this->f = Frame{ dir };
+    }
     
     auto& L(std::size_t s) noexcept                 { return ls[s]; }
     const auto& S(std::size_t s) const noexcept     { return ls[s]; }
@@ -83,6 +86,31 @@ struct RadiancePacket {
     const auto Sy(std::size_t s) const noexcept     { return Ly(s) * Vector4{ 1,-1,0,0 }; }
     const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
     
+    auto& operator*=(Float f) noexcept {
+        for (auto& l : ls)
+            l *= f;
+        return *this;
+    } 
+    auto& operator/=(Float f) noexcept {
+        for (auto& l : ls)
+            l /= f;
+        return *this;
+    }
+    auto& operator*=(const Spectrum &s) noexcept {
+        for (auto i=0;i<SPECTRUM_SAMPLES;++i)
+            ls[i] *= s[i];
+        return *this;
+    }
+    auto& operator/=(const Spectrum &s) noexcept {
+        for (auto i=0;i<SPECTRUM_SAMPLES;++i)
+            ls[i] /= s[i];
+        return *this;
+    }
+    
+    const auto begin() const noexcept { return ls.begin(); }
+    const auto end() const noexcept { return ls.end(); }
+    auto begin() noexcept { return ls.begin(); }
+    auto end() noexcept { return ls.end(); }
     const auto size() const noexcept { return ls.size(); }
     const auto& operator[](std::size_t idx) const noexcept { return ls[idx]; }
     auto& operator[](std::size_t idx) noexcept { return ls[idx]; }
@@ -91,9 +119,8 @@ struct RadiancePacket {
                                            T_y.m[0][0]>0 && T_y.m[1][1]>0; }
 };
 
-inline auto sourceLight(Vector dir, Spectrum emission, const PLTContext &ctx) {
+inline auto sourceLight(Spectrum emission, const PLTContext &ctx) {
     RadiancePacket rad{};
-    rad.f = Frame{ dir };
     rad.r = 0;
     const auto c = ctx.Omega/(2*M_PI*ctx.A);
     for (auto i=0;i<SPECTRUM_SAMPLES;++i) 
