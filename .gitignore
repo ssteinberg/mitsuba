@@ -15,6 +15,7 @@ build/release
 build/debug
 debian
 .sconsign.dblite
+config.py
 config.log
 *.pyc
 

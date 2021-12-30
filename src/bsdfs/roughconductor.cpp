@@ -21,6 +21,13 @@
 #include <mitsuba/hw/basicshader.h>
 #include "microfacet.h"
 #include "ior.h"
+#include "mitsuba/core/fwd.h"
+#include "mitsuba/core/math.h"
+#include "mitsuba/core/vector.h"
+#include "mitsuba/core/warp.h"
+#include "mitsuba/render/shape.h"
+
+#include <boost/math/distributions/normal.hpp>
 
 MTS_NAMESPACE_BEGIN
 
@@ -163,9 +170,9 @@ MTS_NAMESPACE_BEGIN
  * back side, it will be completely black. If this is undesirable,
  * consider using the \pluginref{twosided} BRDF adapter.
  */
-class RoughConductor : public BSDF {
+class Conductor : public BSDF {
 public:
-    RoughConductor(const Properties &props) : BSDF(props) {
+    Conductor(const Properties &props) : BSDF(props) {
         ref<FileResolver> fResolver = Thread::getThread()->getFileResolver();
 
         m_specularReflectance = new ConstantSpectrumTexture(
@@ -189,23 +196,14 @@ public:
         m_eta = props.getSpectrum("eta", intEta) / extEta;
         m_k   = props.getSpectrum("k", intK) / extEta;
 
-        MicrofacetDistribution distr(props);
-        m_type = distr.getType();
-        m_sampleVisible = distr.getSampleVisible();
-
-        m_alphaU = new ConstantFloatTexture(distr.getAlphaU());
-        if (distr.getAlphaU() == distr.getAlphaV())
-            m_alphaV = m_alphaU;
-        else
-            m_alphaV = new ConstantFloatTexture(distr.getAlphaV());
+        m_q = new ConstantFloatTexture(props.getFloat("q", .0f));
+        m_sigma2 = new ConstantFloatTexture(props.getFloat("sigma2", .0f));
     }
 
-    RoughConductor(Stream *stream, InstanceManager *manager)
+    Conductor(Stream *stream, InstanceManager *manager)
      : BSDF(stream, manager) {
-        m_type = (MicrofacetDistribution::EType) stream->readUInt();
-        m_sampleVisible = stream->readBool();
-        m_alphaU = static_cast<Texture *>(manager->getInstance(stream));
-        m_alphaV = static_cast<Texture *>(manager->getInstance(stream));
+        m_q = static_cast<Texture *>(manager->getInstance(stream));
+        m_sigma2 = static_cast<Texture *>(manager->getInstance(stream));
         m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
         m_eta = Spectrum(stream);
         m_k = Spectrum(stream);
@@ -216,212 +214,38 @@ public:
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
-        stream->writeUInt((uint32_t) m_type);
-        stream->writeBool(m_sampleVisible);
-        manager->serialize(stream, m_alphaU.get());
-        manager->serialize(stream, m_alphaV.get());
+        manager->serialize(stream, m_q.get());
+        manager->serialize(stream, m_sigma2.get());
         manager->serialize(stream, m_specularReflectance.get());
         m_eta.serialize(stream);
         m_k.serialize(stream);
     }
 
     void configure() {
-        unsigned int extraFlags = 0;
-        if (m_alphaU != m_alphaV)
-            extraFlags |= EAnisotropic;
-
-        if (!m_alphaU->isConstant() || !m_alphaV->isConstant() ||
-            !m_specularReflectance->isConstant())
-            extraFlags |= ESpatiallyVarying;
+        unsigned int extraFlagsDirect = 0;
+        unsigned int extraFlagsScattered = 0;
+        if (!m_q->isConstant() || !m_sigma2->isConstant() || !m_specularReflectance->isConstant())
+            extraFlagsScattered |= ESpatiallyVarying;
+        if (!m_specularReflectance->isConstant())
+            extraFlagsDirect |= ESpatiallyVarying;
 
         m_components.clear();
-        m_components.push_back(EGlossyReflection | EFrontSide | extraFlags);
+        m_components.push_back(EDirectReflection | EFrontSide | extraFlagsDirect);
+        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlagsScattered);
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
             m_specularReflectance, "specularReflectance", 1.0f);
 
-        m_usesRayDifferentials =
-            m_alphaU->usesRayDifferentials() ||
-            m_alphaV->usesRayDifferentials() ||
-            m_specularReflectance->usesRayDifferentials();
-
         BSDF::configure();
-    }
-
-    /// Helper function: reflect \c wi with respect to a given surface normal
-    inline Vector reflect(const Vector &wi, const Normal &m) const {
-        return 2 * dot(wi, m) * Vector(m) - wi;
-    }
-
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        /* Stop if this component was not requested */
-        if (measure != ESolidAngle ||
-            Frame::cosTheta(bRec.wi) <= 0 ||
-            Frame::cosTheta(bRec.wo) <= 0 ||
-            ((bRec.component != -1 && bRec.component != 0) ||
-            !(bRec.typeMask & EGlossyReflection)))
-            return Spectrum(0.0f);
-
-        /* Calculate the reflection half-vector */
-        Vector H = normalize(bRec.wo+bRec.wi);
-
-        /* Construct the microfacet distribution matching the
-           roughness values at the current surface position. */
-        MicrofacetDistribution distr(
-            m_type,
-            m_alphaU->eval(bRec.its).average(),
-            m_alphaV->eval(bRec.its).average(),
-            m_sampleVisible
-        );
-
-        /* Evaluate the microfacet normal distribution */
-        const Float D = distr.eval(H);
-        if (D == 0)
-            return Spectrum(0.0f);
-
-        /* Fresnel factor */
-        const Spectrum F = fresnelConductorExact(dot(bRec.wi, H), m_eta, m_k) *
-            m_specularReflectance->eval(bRec.its);
-
-        /* Smith's shadow-masking function */
-        const Float G = distr.G(bRec.wi, bRec.wo, H);
-
-        /* Calculate the total amount of reflection */
-        Float model = D * G / (4.0f * Frame::cosTheta(bRec.wi));
-
-        return F * model;
-    }
-
-    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        if (measure != ESolidAngle ||
-            Frame::cosTheta(bRec.wi) <= 0 ||
-            Frame::cosTheta(bRec.wo) <= 0 ||
-            ((bRec.component != -1 && bRec.component != 0) ||
-            !(bRec.typeMask & EGlossyReflection)))
-            return 0.0f;
-
-        /* Calculate the reflection half-vector */
-        Vector H = normalize(bRec.wo+bRec.wi);
-
-        /* Construct the microfacet distribution matching the
-           roughness values at the current surface position. */
-        MicrofacetDistribution distr(
-            m_type,
-            m_alphaU->eval(bRec.its).average(),
-            m_alphaV->eval(bRec.its).average(),
-            m_sampleVisible
-        );
-
-        if (m_sampleVisible)
-            return distr.eval(H) * distr.smithG1(bRec.wi, H)
-                / (4.0f * Frame::cosTheta(bRec.wi));
-        else
-            return distr.pdf(bRec.wi, H) / (4 * absDot(bRec.wo, H));
-    }
-
-    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        if (Frame::cosTheta(bRec.wi) < 0 ||
-            ((bRec.component != -1 && bRec.component != 0) ||
-            !(bRec.typeMask & EGlossyReflection)))
-            return Spectrum(0.0f);
-
-        /* Construct the microfacet distribution matching the
-           roughness values at the current surface position. */
-        MicrofacetDistribution distr(
-            m_type,
-            m_alphaU->eval(bRec.its).average(),
-            m_alphaV->eval(bRec.its).average(),
-            m_sampleVisible
-        );
-
-        /* Sample M, the microfacet normal */
-        Float pdf;
-        Normal m = distr.sample(bRec.wi, sample, pdf);
-
-        if (pdf == 0)
-            return Spectrum(0.0f);
-
-        /* Perfect specular reflection based on the microfacet normal */
-        bRec.wo = reflect(bRec.wi, m);
-        bRec.eta = 1.0f;
-        bRec.sampledComponent = 0;
-        bRec.sampledType = EGlossyReflection;
-
-        /* Side check */
-        if (Frame::cosTheta(bRec.wo) <= 0)
-            return Spectrum(0.0f);
-
-        Spectrum F = fresnelConductorExact(dot(bRec.wi, m),
-            m_eta, m_k) * m_specularReflectance->eval(bRec.its);
-
-        Float weight;
-        if (m_sampleVisible) {
-            weight = distr.smithG1(bRec.wo, m);
-        } else {
-            weight = distr.eval(m) * distr.G(bRec.wi, bRec.wo, m)
-                * dot(bRec.wi, m) / (pdf * Frame::cosTheta(bRec.wi));
-        }
-
-        return F * weight;
-    }
-
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        if (Frame::cosTheta(bRec.wi) < 0 ||
-            ((bRec.component != -1 && bRec.component != 0) ||
-            !(bRec.typeMask & EGlossyReflection)))
-            return Spectrum(0.0f);
-
-        /* Construct the microfacet distribution matching the
-           roughness values at the current surface position. */
-        MicrofacetDistribution distr(
-            m_type,
-            m_alphaU->eval(bRec.its).average(),
-            m_alphaV->eval(bRec.its).average(),
-            m_sampleVisible
-        );
-
-        /* Sample M, the microfacet normal */
-        Normal m = distr.sample(bRec.wi, sample, pdf);
-
-        if (pdf == 0)
-            return Spectrum(0.0f);
-
-        /* Perfect specular reflection based on the microfacet normal */
-        bRec.wo = reflect(bRec.wi, m);
-        bRec.eta = 1.0f;
-        bRec.sampledComponent = 0;
-        bRec.sampledType = EGlossyReflection;
-
-        /* Side check */
-        if (Frame::cosTheta(bRec.wo) <= 0)
-            return Spectrum(0.0f);
-
-        Spectrum F = fresnelConductorExact(dot(bRec.wi, m),
-            m_eta, m_k) * m_specularReflectance->eval(bRec.its);
-
-        Float weight;
-        if (m_sampleVisible) {
-            weight = distr.smithG1(bRec.wo, m);
-        } else {
-            weight = distr.eval(m) * distr.G(bRec.wi, bRec.wo, m)
-                * dot(bRec.wi, m) / (pdf * Frame::cosTheta(bRec.wi));
-        }
-
-        /* Jacobian of the half-direction mapping */
-        pdf /= 4.0f * dot(bRec.wo, m);
-
-        return F * weight;
     }
 
     void addChild(const std::string &name, ConfigurableObject *child) {
         if (child->getClass()->derivesFrom(MTS_CLASS(Texture))) {
-            if (name == "alpha")
-                m_alphaU = m_alphaV = static_cast<Texture *>(child);
-            else if (name == "alphaU")
-                m_alphaU = static_cast<Texture *>(child);
-            else if (name == "alphaV")
-                m_alphaV = static_cast<Texture *>(child);
+            if (name == "q")
+                m_q = static_cast<Texture *>(child);
+            else if (name == "sigma2")
+                m_sigma2 = static_cast<Texture *>(child);
             else if (name == "specularReflectance")
                 m_specularReflectance = static_cast<Texture *>(child);
             else
@@ -431,19 +255,211 @@ public:
         }
     }
 
-    Float getRoughness(const Intersection &its, int component) const {
-        return 0.5f * (m_alphaU->eval(its).average()
-            + m_alphaV->eval(its).average());
+    /// Helper function: reflect \c wi with respect to a given surface normal
+    inline Vector reflect(const Vector &wi) const {
+        const auto m = Vector3{ 0,0,1 };
+        return 2 * dot(wi, m) * Vector(m) - wi;
+    }
+    
+    inline auto alpha(const Float costhetai, const Float q) const {
+        const auto a = -sqr(2 * costhetai * q) * Spectrum::ks() * Spectrum::ks();
+        return a.exp();
+    }
+
+    inline auto diffract(const Matrix3x3& invSigma, Float sigma2, const Frame &f, const Vector3 &h) const {
+        Matrix3x3 Q = Matrix3x3(f.s,f.t,f.n), Qt;
+        Q.transpose(Qt);
+        const auto& invTheta = Q*invSigma*Qt;
+        const auto& invTheta2x2 = Matrix2x2(invTheta.m[0][0], invTheta.m[0][1],
+                                            invTheta.m[0][1], invTheta.m[1][1]);
+        
+        const Matrix2x2& S = invTheta2x2 + (Float(1)/sigma2) * Matrix2x2(1,0,0,1);
+        Matrix2x2 invS;
+        S.invert2x2(invS);
+        const auto& h2 = Vector2(h.x,h.y);
+
+        return Float(.5)*INV_PI/std::sqrt(S.det()) * std::exp(-Float(.5)*dot(h2,invS*h2));
+    }
+
+    auto envelopeScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &h) const {
+        const auto sigma_min = pltCtx.sigma_zz;
+        const auto sigma2 = m_sigma2->eval(its).average();
+        const auto w = Float(1) / sigma_min + Float(1) / sigma2;
+        
+        const auto dist = boost::math::normal{ Float(0), w };
+        Spectrum gx, gy;
+        for (std::size_t i=0;i<SPECTRUM_SAMPLES;++i) {
+            const auto kh = Spectrum::ks()[i]*h;
+            gx[i] = boost::math::pdf(dist, kh.x);
+            gy[i] = boost::math::pdf(dist, kh.y);
+        }
+        
+        return gx*gy;
+    }
+
+    auto sampleScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &wi, const Point2 &sample) const {
+        const auto sigma_min = pltCtx.sigma_zz;
+        const auto sigma2 = m_sigma2->eval(its).average();
+        const auto w = Float(1) / sigma_min + Float(1) / sigma2;
+        const auto k = Spectrum::ks().average();
+        
+    }
+
+    Spectrum envelope(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx, EMeasure measure) const {
+        const auto hasDirect = (bRec.typeMask & EDirectReflection)
+                && (bRec.component == -1 || bRec.component == 0)
+                && measure == EDiscrete;
+        const auto hasScattered = (bRec.typeMask & EScatteredReflection)
+                && (bRec.component == -1 || bRec.component == 1)
+                && measure == ESolidAngle;
+
+        if ((!hasDirect && !hasScattered)
+            || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
+            return Spectrum(0.0f);
+        
+        const auto m00 = m_specularReflectance->eval(bRec.its);
+        const auto q = m_q->eval(bRec.its).average();
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto a = alpha(Frame::cosTheta(bRec.wi), q);
+        
+        if (hasDirect) {
+            if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
+                return a * m00;
+        }
+        else {
+            return costheta_o * sqr(q) * (Spectrum(1.f)-a) * m00 * 
+                    envelopeScattered(bRec.its, pltCtx, bRec.wo + bRec.wi);
+        }
+    }
+
+    Spectrum eval(const BSDFSamplingRecord &bRec, 
+        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
+        EMeasure measure) const {
+        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
+        
+        const auto hasDirect = (bRec.typeMask & EDirectReflection)
+                && (bRec.component == -1 || bRec.component == 0)
+                && measure == EDiscrete;
+        const auto hasScattered = (bRec.typeMask & EScatteredReflection)
+                && (bRec.component == -1 || bRec.component == 1)
+                && measure == ESolidAngle;
+
+        if ((!hasDirect && !hasScattered)
+            || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
+            return Spectrum(0.0f);
+        
+        const auto m00 = m_specularReflectance->eval(bRec.its);
+        const auto q = m_q->eval(bRec.its).average();
+        const auto sigma2 = m_sigma2->eval(bRec.its).average();
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto a = alpha(Frame::cosTheta(bRec.wi), q);
+
+        const auto& in = radiancePacket.spectrum();
+        Spectrum result = Spectrum(.0f);
+        for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
+            if (hasDirect) {
+                if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
+                    return Spectrum(.0f);
+                
+                radiancePacket.L(idx) = a[idx] * m00[idx] * M * radiancePacket.S(idx);
+            }
+            else {
+                const auto k = Spectrum::ks()[idx];
+                const auto h = k*(bRec.wo + bRec.wi);
+                const auto Dx = diffract(radiancePacket.invThetax(k,pltCtx.sigma_zz), sigma2, bRec.its.shFrame, h);
+                const auto Dy = diffract(radiancePacket.invThetay(k,pltCtx.sigma_zz), sigma2, bRec.its.shFrame, h);
+                const auto Dc = diffract(radiancePacket.invThetac(k,pltCtx.sigma_zz), sigma2, bRec.its.shFrame, h);
+                
+                radiancePacket.L(idx) = costheta_o * sqr(q) * (1-a[idx]) * m00[idx] * M * 
+                               (Dx*radiancePacket.Sx(idx) + Dy*radiancePacket.Sy(idx) + Dc*radiancePacket.Sc(idx));
+            }
+
+            if (in[idx]>RCPOVERFLOW)
+                result[idx] = radiancePacket.L(idx)[0] / in[idx];
+        }
+        
+        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
+
+        return result;
+    }
+
+    Float pdf(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx, EMeasure measure) const {
+        const auto hasDirect = (bRec.typeMask & EDirectReflection)
+                && (bRec.component == -1 || bRec.component == 0);
+        const auto hasScattered = (bRec.typeMask & EScatteredReflection)
+                && (bRec.component == -1 || bRec.component == 1);
+
+        if (Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
+            return 0.0f;
+
+        Float probDirect = hasDirect ? 1.0f : 0.0f;
+        if (hasDirect && hasScattered) {
+            const auto q = m_q->eval(bRec.its).average();
+            probDirect = alpha(Frame::cosTheta(bRec.wi), q).average();
+        }
+
+        if (hasDirect && measure == EDiscrete) {
+            /* Check if the provided direction pair matches an ideal
+               specular reflection; tolerate some roundoff errors */
+            if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
+                return probDirect;
+        } else if (hasScattered && measure == ESolidAngle) {
+            return warp::squareToCosineHemispherePdf(bRec.wo) * (1-probDirect);
+        }
+
+        return 0.0f;
+    }
+
+    Spectrum sample(BSDFSamplingRecord &bRec, const PLTContext &pltCtx, const Point2 &sample) const {
+        const auto hasDirect = (bRec.typeMask & EDirectReflection)
+                && (bRec.component == -1 || bRec.component == 0);
+        const auto hasScattered = (bRec.typeMask & EScatteredReflection)
+                && (bRec.component == -1 || bRec.component == 1);
+
+        if ((!hasScattered && !hasDirect) || Frame::cosTheta(bRec.wi) <= 0)
+            return Spectrum(0.0f);
+        
+        const auto m00 = m_specularReflectance->eval(bRec.its);
+        const auto q = m_q->eval(bRec.its).average();
+        const auto a = alpha(Frame::cosTheta(bRec.wi), q);
+
+        bRec.eta = 1.0f;
+        if (hasScattered && hasDirect) {
+            const auto probDirect = a.average();
+
+            if (sample.x < probDirect) {
+                bRec.sampledComponent = 0;
+                bRec.sampledType = EDirectReflection;
+                bRec.wo = reflect(bRec.wi);
+
+                return Float(1)/probDirect * a * m00;
+            } else {
+                bRec.sampledComponent = 1;
+                bRec.sampledType = EDirectReflection;
+                bRec.wo = sampleScattered(bRec.its, pltCtx, bRec.wi, bRec.sampler->next2D());
+
+                return sqr(q)/(1-probDirect) * (Spectrum(1.f)-a) * m00;
+            }
+        } else if (hasDirect) {
+            bRec.sampledComponent = 0;
+            bRec.sampledType = EDirectReflection;
+            bRec.wo = reflect(bRec.wi);
+            return a * m00;
+        } else {
+            bRec.sampledComponent = 1;
+            bRec.sampledType = EScatteredReflection;
+            bRec.wo = sampleScattered(bRec.its, pltCtx, bRec.wi, bRec.sampler->next2D());
+
+            return sqr(q) * (Spectrum(1.f)-a) * m00;
+        }
     }
 
     std::string toString() const {
         std::ostringstream oss;
-        oss << "RoughConductor[" << endl
+        oss << "Conductor[" << endl
             << "  id = \"" << getID() << "\"," << endl
-            << "  distribution = " << MicrofacetDistribution::distributionName(m_type) << "," << endl
-            << "  sampleVisible = " << m_sampleVisible << "," << endl
-            << "  alphaU = " << indent(m_alphaU->toString()) << "," << endl
-            << "  alphaV = " << indent(m_alphaV->toString()) << "," << endl
+            << "  q = " << indent(m_q->toString()) << "," << endl
+            << "  sigma2 = " << indent(m_sigma2->toString()) << "," << endl
             << "  specularReflectance = " << indent(m_specularReflectance->toString()) << "," << endl
             << "  eta = " << m_eta.toString() << "," << endl
             << "  k = " << m_k.toString() << endl
@@ -451,131 +467,14 @@ public:
         return oss.str();
     }
 
-    Shader *createShader(Renderer *renderer) const;
-
     MTS_DECLARE_CLASS()
 private:
-    MicrofacetDistribution::EType m_type;
     ref<Texture> m_specularReflectance;
-    ref<Texture> m_alphaU, m_alphaV;
-    bool m_sampleVisible;
+    ref<Texture> m_q, m_sigma2;
     Spectrum m_eta, m_k;
 };
 
-/**
- * GLSL port of the rough conductor shader. This version is much more
- * approximate -- it only supports the Ashikhmin-Shirley distribution,
- * does everything in RGB, and it uses the Schlick approximation to the
- * Fresnel reflectance of conductors. When the roughness is lower than
- * \alpha < 0.2, the shader clamps it to 0.2 so that it will still perform
- * reasonably well in a VPL-based preview.
- */
-class RoughConductorShader : public Shader {
-public:
-    RoughConductorShader(Renderer *renderer, const Texture *specularReflectance,
-            const Texture *alphaU, const Texture *alphaV, const Spectrum &eta,
-            const Spectrum &k) : Shader(renderer, EBSDFShader),
-            m_specularReflectance(specularReflectance), m_alphaU(alphaU), m_alphaV(alphaV) {
-        m_specularReflectanceShader = renderer->registerShaderForResource(m_specularReflectance.get());
-        m_alphaUShader = renderer->registerShaderForResource(m_alphaU.get());
-        m_alphaVShader = renderer->registerShaderForResource(m_alphaV.get());
 
-        /* Compute the reflectance at perpendicular incidence */
-        m_R0 = fresnelConductorExact(1.0f, eta, k);
-    }
-
-    bool isComplete() const {
-        return m_specularReflectanceShader.get() != NULL &&
-               m_alphaUShader.get() != NULL &&
-               m_alphaVShader.get() != NULL;
-    }
-
-    void putDependencies(std::vector<Shader *> &deps) {
-        deps.push_back(m_specularReflectanceShader.get());
-        deps.push_back(m_alphaUShader.get());
-        deps.push_back(m_alphaVShader.get());
-    }
-
-    void cleanup(Renderer *renderer) {
-        renderer->unregisterShaderForResource(m_specularReflectance.get());
-        renderer->unregisterShaderForResource(m_alphaU.get());
-        renderer->unregisterShaderForResource(m_alphaV.get());
-    }
-
-    void resolve(const GPUProgram *program, const std::string &evalName, std::vector<int> &parameterIDs) const {
-        parameterIDs.push_back(program->getParameterID(evalName + "_R0", false));
-    }
-
-    void bind(GPUProgram *program, const std::vector<int> &parameterIDs, int &textureUnitOffset) const {
-        program->setParameter(parameterIDs[0], m_R0);
-    }
-
-    void generateCode(std::ostringstream &oss,
-            const std::string &evalName,
-            const std::vector<std::string> &depNames) const {
-        oss << "uniform vec3 " << evalName << "_R0;" << endl
-            << endl
-            << "float " << evalName << "_D(vec3 m, float alphaU, float alphaV) {" << endl
-            << "    float ct = cosTheta(m), ds = 1-ct*ct;" << endl
-            << "    if (ds <= 0.0)" << endl
-            << "        return 0.0f;" << endl
-            << "    alphaU = 2 / (alphaU * alphaU) - 2;" << endl
-            << "    alphaV = 2 / (alphaV * alphaV) - 2;" << endl
-            << "    float exponent = (alphaU*m.x*m.x + alphaV*m.y*m.y)/ds;" << endl
-            << "    return sqrt((alphaU+2) * (alphaV+2)) * 0.15915 * pow(ct, exponent);" << endl
-            << "}" << endl
-            << endl
-            << "float " << evalName << "_G(vec3 m, vec3 wi, vec3 wo) {" << endl
-            << "    if ((dot(wi, m) * cosTheta(wi)) <= 0 || " << endl
-            << "        (dot(wo, m) * cosTheta(wo)) <= 0)" << endl
-            << "        return 0.0;" << endl
-            << "    float nDotM = cosTheta(m);" << endl
-            << "    return min(1.0, min(" << endl
-            << "        abs(2 * nDotM * cosTheta(wo) / dot(wo, m))," << endl
-            << "        abs(2 * nDotM * cosTheta(wi) / dot(wi, m))));" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "_schlick(float ct) {" << endl
-            << "    float ctSqr = ct*ct, ct5 = ctSqr*ctSqr*ct;" << endl
-            << "    return " << evalName << "_R0 + (vec3(1.0) - " << evalName << "_R0) * ct5;" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "   if (cosTheta(wi) <= 0 || cosTheta(wo) <= 0)" << endl
-            << "        return vec3(0.0);" << endl
-            << "   vec3 H = normalize(wi + wo);" << endl
-            << "   vec3 reflectance = " << depNames[0] << "(uv);" << endl
-            << "   float alphaU = max(0.2, " << depNames[1] << "(uv).r);" << endl
-            << "   float alphaV = max(0.2, " << depNames[2] << "(uv).r);" << endl
-            << "   float D = " << evalName << "_D(H, alphaU, alphaV)" << ";" << endl
-            << "   float G = " << evalName << "_G(H, wi, wo);" << endl
-            << "   vec3 F = " << evalName << "_schlick(1-dot(wi, H));" << endl
-            << "   return reflectance * F * (D * G / (4*cosTheta(wi)));" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "_diffuse(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    if (cosTheta(wi) < 0.0 || cosTheta(wo) < 0.0)" << endl
-            << "        return vec3(0.0);" << endl
-            << "    return " << evalName << "_R0 * inv_pi * inv_pi * cosTheta(wo);"<< endl
-            << "}" << endl;
-    }
-    MTS_DECLARE_CLASS()
-private:
-    ref<const Texture> m_specularReflectance;
-    ref<const Texture> m_alphaU;
-    ref<const Texture> m_alphaV;
-    ref<Shader> m_specularReflectanceShader;
-    ref<Shader> m_alphaUShader;
-    ref<Shader> m_alphaVShader;
-    Spectrum m_R0;
-};
-
-Shader *RoughConductor::createShader(Renderer *renderer) const {
-    return new RoughConductorShader(renderer,
-        m_specularReflectance.get(), m_alphaU.get(), m_alphaV.get(), m_eta, m_k);
-}
-
-MTS_IMPLEMENT_CLASS(RoughConductorShader, false, Shader)
-MTS_IMPLEMENT_CLASS_S(RoughConductor, false, BSDF)
-MTS_EXPORT_PLUGIN(RoughConductor, "Rough conductor BRDF");
+MTS_IMPLEMENT_CLASS_S(Conductor, false, BSDF)
+MTS_EXPORT_PLUGIN(Conductor, "Rough conductor BRDF");
 MTS_NAMESPACE_END

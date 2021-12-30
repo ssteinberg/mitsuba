@@ -86,6 +86,44 @@ struct RadiancePacket {
     const auto Sy(std::size_t s) const noexcept     { return Ly(s) * Vector4{ 1,-1,0,0 }; }
     const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
     
+    const auto Thetax(Float k, Float sigma_zz) const noexcept {
+        const auto T = sqr(r/k) * T_x;
+        return Matrix3x3(T.m[0][0], T.m[0][1], 0,
+                         T.m[0][1], T.m[1][1], 0,
+                         0,         0,         sigma_zz);
+    } 
+    const auto Thetay(Float k, Float sigma_zz) const noexcept {
+        const auto T = sqr(r/k) * T_y;
+        return Matrix3x3(T.m[0][0], T.m[0][1], 0,
+                         T.m[0][1], T.m[1][1], 0,
+                         0,         0,         sigma_zz);
+    }
+    const auto Thetac(Float k, Float sigma_zz) const noexcept {
+        return Float(.5) * (Thetax(k,sigma_zz) + Thetay(k,sigma_zz));
+    }
+    
+    const auto invThetax(Float k, Float sigma_zz) const noexcept {
+        const auto T = sqr(r/k) * T_x;
+        return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+            Matrix3x3( T.m[1][1], -T.m[0][1], 0,
+                      -T.m[0][1],  T.m[0][0], 0,
+                       0,          0,         Float(1) / sigma_zz);
+    } 
+    const auto invThetay(Float k, Float sigma_zz) const noexcept {
+        const auto T = sqr(r/k) * T_y;
+        return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+            Matrix3x3( T.m[1][1], -T.m[0][1], 0,
+                      -T.m[0][1],  T.m[0][0], 0,
+                       0,          0,         Float(1) / sigma_zz);
+    } 
+    const auto invThetac(Float k, Float sigma_zz) const noexcept {
+        const auto T = sqr(r/k) * Float(.5) * (T_x+T_y);
+        return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+            Matrix3x3( T.m[1][1], -T.m[0][1], 0,
+                      -T.m[0][1],  T.m[0][0], 0,
+                       0,          0,         Float(1) / sigma_zz);
+    } 
+    
     auto& operator*=(Float f) noexcept {
         for (auto& l : ls)
             l *= f;

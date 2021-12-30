@@ -352,10 +352,10 @@ public:
      *         factor when a non-delta component is sampled). A zero spectrum
      *         means that sampling failed.
      */
-    virtual Spectrum sample(BSDFSamplingRecord &bRec,
+    virtual Spectrum sample(BSDFSamplingRecord &bRec, const PLTContext &pltCtx,
         const Point2 &sample) const = 0;
     
-    virtual Float pdf(const BSDFSamplingRecord &bRec,
+    virtual Float pdf(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx,
         EMeasure measure = ESolidAngle) const = 0;
 
     /**
@@ -375,7 +375,7 @@ public:
      *     different measures. (E.g. a diffuse material with an
      *     ideally smooth dielectric coating).
      */
-    virtual Spectrum envelope(const BSDFSamplingRecord &bRec,
+    virtual Spectrum envelope(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx,
         EMeasure measure = ESolidAngle) const = 0;
     
     virtual Spectrum eval(const BSDFSamplingRecord &bRec,

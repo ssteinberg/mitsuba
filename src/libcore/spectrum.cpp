@@ -113,6 +113,13 @@ void Spectrum::staticInitialization() {
                 oss << ", ";
         }
     }
+    
+    for (std::size_t i=0;i<SPECTRUM_SAMPLES;++i) {
+        const auto b = getBinCoverage(i);
+        const auto l = (b.first+b.second)/2;
+        m_lambdas[i] = l/1e+3;
+        m_ks[i] = 2*M_PI / m_lambdas[i];
+    }
 
     /* Pre-integrate the XYZ color matching functions */
     CIE_X.fromContinuousSpectrum(CIE_X_interp);
