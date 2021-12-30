@@ -111,7 +111,8 @@ public:
                 sensorSubpath.initialize(m_scene, time, ERadiance, m_pool);
 
                 /* Perform a random walk using alternating steps on each path */
-                Path::alternatingRandomWalkFromPixel(m_scene, m_sampler,
+                Path::alternatingRandomWalkFromPixel(m_scene, m_sampler, 
+                    m_config.pltCtx,
                     emitterSubpath, emitterDepth, sensorSubpath,
                     sensorDepth, offset, m_config.rrDepth, m_pool);
 
@@ -273,8 +274,9 @@ public:
                 value *= connectionEdge.evalCached(vs, vt,
                                                    PathEdge::EGeneralizedGeometricTerm);
                 /* Compute the multiple importance sampling weight */
-                value *= Path::miWeight(scene, emitterSubpath, &connectionEdge,
-                    sensorSubpath, s, t, m_config.sampleDirect, m_config.lightImage);
+                value *= Path::miWeight(scene, m_config.pltCtx,
+                    emitterSubpath, &connectionEdge, sensorSubpath, 
+                    s, t, m_config.sampleDirect, m_config.lightImage);
 
                 if (t >= 2)
                     sampleValue += value;

@@ -16,6 +16,10 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/core/constants.h"
+#include "mitsuba/core/math.h"
+#include "mitsuba/render/sampler.h"
+#include <cmath>
 #include <mitsuba/core/warp.h>
 
 MTS_NAMESPACE_BEGIN
@@ -41,14 +45,8 @@ Vector squareToUniformHemisphere(const Point2 &sample) {
 }
 
 Vector squareToCosineHemisphere(const Point2 &sample) {
-    Point2 p = squareToUniformDiskConcentric(sample);
-    Float z = math::safe_sqrt(1.0f - p.x*p.x - p.y*p.y);
-
-    /* Guard against numerical imprecisions */
-    if (EXPECT_NOT_TAKEN(z == 0))
-        z = 1e-10f;
-
-    return Vector(p.x, p.y, z);
+    const auto p = squareToUniformDiskConcentric(sample);
+    return diskToCosineHemisphere(p);
 }
 
 Vector squareToUniformCone(Float cosCutoff, const Point2 &sample) {
@@ -138,6 +136,38 @@ Point2 squareToStdNormal(const Point2 &sample) {
 
 Float squareToStdNormalPdf(const Point2 &pos) {
     return INV_TWOPI * math::fastexp(-(pos.x*pos.x + pos.y*pos.y)/2.0f);
+}
+
+Vector squareToClampedGaussian(Float stddev, Point2 mean, Sampler &sampler) {
+    constexpr auto attempts = 666ull;
+    for (auto i=0ull; i<attempts; ++i) {
+        const auto& p = squareToStdNormal(sampler.next2D()) * stddev + mean;
+        const auto l = sqr(p.x)+sqr(p.y);
+        if (l<=1) {
+            auto z = math::safe_sqrt(1-l);
+            if (EXPECT_NOT_TAKEN(z == 0))
+                z = 1e-10f;
+            return Vector{ p.x,p.y,z };
+        }
+    }
+
+    assert(false);  // Rejection sampling failed
+    return diskToCosineHemisphere(mean);
+}
+
+Float squareToClampedGaussianPdf(Float stddev, Point2 mean, const Point2 &pos) {
+    const auto p = (pos-mean) / stddev;
+
+    const auto pdfxmin = std::erf((-Float(1)-mean.x) / stddev);
+    const auto pdfxmax = std::erf(( Float(1)-mean.x) / stddev);
+    const auto ymax = math::safe_sqrt(1-sqr(pos.x-mean.x));
+    const auto pdfymin = std::erf((-ymax-mean.y) / stddev);
+    const auto pdfymax = std::erf(( ymax-mean.y) / stddev);
+
+    const auto r = (pdfxmax-pdfxmin) * (pdfymax-pdfymin);
+    if (r>RCPOVERFLOW)
+        return squareToStdNormalPdf({ p.x,p.y }) / r;
+    return 1;
 }
 
 static Float intervalToTent(Float sample) {

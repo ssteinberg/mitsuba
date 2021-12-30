@@ -18,8 +18,12 @@
 
 #pragma once
 
+#include "mitsuba/core/constants.h"
+#include "mitsuba/core/platform.h"
 #if !defined(__MITSUBA_CORE_MATH_H_)
 #define __MITSUBA_CORE_MATH_H_
+
+#include <cmath>
 
 MTS_NAMESPACE_BEGIN
 
@@ -279,6 +283,8 @@ inline size_t roundToPowerOfTwo(size_t value) {
             return copysign((double) 1.0, value);
         #endif
     }
+    template <typename T>
+    int sgn(T val) noexcept { return (T(0) < val) - (val < T(0)); }
 
     /// Cast to single precision and round up if not exactly representable (passthrough)
     inline float castflt_up(float val) { return val; }
@@ -310,6 +316,19 @@ inline size_t roundToPowerOfTwo(size_t value) {
         if ((double) a > val)
             b += a > 0 ? -1 : 1;
         return a;
+    }
+
+    /// Inverse error function
+    template <typename T>
+    inline auto inverr(T x) noexcept {
+        constexpr auto a = T(1.47);
+
+        const auto l = std::log(1 - sqr(x));
+        const auto b = 2*INV_PI/a;
+        const auto c = b + l/2;
+        const auto d = std::sqrt(c*c - l/a);
+
+        return sgn(x) * std::sqrt(d - (b + l/2));
     }
 }; /* namespace math */
 

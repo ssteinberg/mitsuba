@@ -115,19 +115,18 @@ public:
     }
 
     Spectrum eval(const BSDFSamplingRecord &bRec, 
-        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
-        EMeasure measure) const {
+        RadiancePacket &radiancePacket, EMeasure measure) const {
         Assert(bRec.mode==ERadiance);
 
         BSDFSamplingRecord b(bRec);
         if (Frame::cosTheta(b.wi) > 0) {
-            return m_nestedBRDF[0]->eval(b, radiancePacket, pltCtx, measure);
+            return m_nestedBRDF[0]->eval(b, radiancePacket, measure);
         } else {
             if (b.component != -1)
                 b.component -= m_nestedBRDF[0]->getComponentCount();
             b.wi.z *= -1;
             b.wo.z *= -1;
-            return m_nestedBRDF[1]->eval(b, radiancePacket, pltCtx, measure);
+            return m_nestedBRDF[1]->eval(b, radiancePacket, measure);
         }
     }
 

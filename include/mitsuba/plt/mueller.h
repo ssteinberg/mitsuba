@@ -5,12 +5,14 @@
 
 #pragma once
 
-#include "mitsuba/core/math.h"
-#include "mitsuba/core/vector.h"
-#include <cmath>
+#include <complex>
+#include <mitsuba/core/math.h>
+#include <mitsuba/core/vector.h>
 #include <mitsuba/core/frame.h>
 #include <mitsuba/core/matrix.h>
+#include <mitsuba/core/util.h>
 
+#include <cmath>
 #include <cassert>
 
 MTS_NAMESPACE_BEGIN
@@ -40,6 +42,39 @@ inline Matrix4x4 MuellerT(const Frame &f1, const Frame &f2) {
     T.m[1][2] = -ry;
     T.m[2][1] = ry;
     return T;
+}
+
+// Mueller Fresnel matrices
+template <typename T>
+auto MuellerFresnel(const T &fs, const T &fp) noexcept {
+    const auto Rp = sqr(std::abs(fp));
+    const auto Rs = sqr(std::abs(fs));
+    const auto m00 = (Rp+Rs)/2;
+    const auto m01 = (Rp-Rs)/2;
+    const auto m22 = std::real(fs*std::conj(fp));
+    const auto m23 = std::imag(fs*std::conj(fp));
+    return Matrix4x4(m00,m01, 0,  0,
+                     m01,m00, 0,  0,
+                     0,  0,   m22,m23,
+                     0,  0,  -m23,m22);
+}
+inline Matrix4x4 MuellerFresnelRConductor(Float cosThetaI, const std::complex<Float>& eta) noexcept {
+    std::complex<Float> rs,rp;
+    fresnel_conductor(cosThetaI, eta, rs, rp);
+
+    return MuellerFresnel(rs, rp);
+}
+inline Matrix4x4 MuellerFresnelRDielectric(Float cosThetaI, Float eta) noexcept {
+    Float cosThetaT, rs,rp, ts,tp;
+    fresnel_dielectric(cosThetaI, eta, cosThetaT, rs, rp, ts, tp);
+
+    return MuellerFresnel(rs, rp);
+}
+inline Matrix4x4 MuellerFresnelTDielectric(Float cosThetaI, Float &cosThetaT, Float eta) noexcept {
+    Float rs,rp, ts,tp;
+    fresnel_dielectric(cosThetaI, eta, cosThetaT, rs, rp, ts, tp);
+
+    return MuellerFresnel(ts, tp);
 }
 
 MTS_NAMESPACE_END

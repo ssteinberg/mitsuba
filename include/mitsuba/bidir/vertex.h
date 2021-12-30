@@ -273,7 +273,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
      */
     bool sampleNext(const Scene *scene, Sampler *sampler,
         const PathVertex *pred, const PathEdge *predEdge,
-        PathEdge *succEdge, PathVertex *succ,
+        PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         ETransportMode mode, bool russianRoulette = false, 
         Spectrum *throughput = NULL);
 
@@ -388,7 +388,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
      * \return \c true on success
      */
     bool perturbDirection(const Scene *scene, const PathVertex *pred,
-        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ,
+        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         const Vector &d, Float dist, EVertexType desiredType, ETransportMode mode);
 
     /**
@@ -441,7 +441,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
      * \return \c true on success
      */
     bool propagatePerturbation(const Scene *scene, const PathVertex *pred,
-        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ,
+        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         unsigned int componentType, Float dist, EVertexType desiredType,
         ETransportMode mode);
 
@@ -478,7 +478,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
      * \return The contribution weighting factor
      */
     Spectrum envelope(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, 
+        const PathVertex *succ, const PLTContext &pltCtx, ETransportMode mode, 
         EMeasure measure = EArea) const;
     
     Spectrum eval(const Scene *scene, const PathVertex *pred,
@@ -519,7 +519,8 @@ struct MTS_EXPORT_BIDIR PathVertex {
      * \return The computed probability density
      */
     Float evalPdf(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure = EArea) const;
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, EMeasure measure = EArea) const;
 
     /**
      * \brief Compute the area density of a provided emitter or sensor
@@ -844,7 +845,8 @@ struct MTS_EXPORT_BIDIR PathVertex {
      * \return \c false when there is no throughput
      */
     bool update(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure = EArea);
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, EMeasure measure = EArea);
 
     /**
      * \brief Create a connection between two disconnected subpaths
@@ -892,13 +894,15 @@ struct MTS_EXPORT_BIDIR PathVertex {
     static bool connect(const Scene *scene,
             const PathVertex *pred, const PathEdge *predEdge,
             PathVertex *vs, PathEdge *edge, PathVertex *vt,
-            const PathEdge *succEdge, const PathVertex *succ);
+            const PathEdge *succEdge, const PathVertex *succ,
+            const PLTContext &pltCtx);
 
     /// Like the above, but can be used to connect delta endpoints
     static bool connect(const Scene *scene,
             const PathVertex *pred, const PathEdge *predEdge,
             PathVertex *vs, PathEdge *edge, PathVertex *vt,
             const PathEdge *succEdge, const PathVertex *succ,
+            const PLTContext &pltCtx,
             EMeasure vsMeasure, EMeasure vtMeasure);
 
     /// Create a deep copy of this vertex

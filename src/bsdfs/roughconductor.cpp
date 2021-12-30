@@ -25,6 +25,8 @@
 #include "mitsuba/core/math.h"
 #include "mitsuba/core/vector.h"
 #include "mitsuba/core/warp.h"
+#include "mitsuba/plt/mueller.h"
+#include "mitsuba/render/sampler.h"
 #include "mitsuba/render/shape.h"
 
 #include <boost/math/distributions/normal.hpp>
@@ -282,7 +284,7 @@ public:
     }
 
     auto envelopeScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &h) const {
-        const auto sigma_min = pltCtx.sigma_zz;
+        const auto sigma_min = pltCtx.sigma_zz * 1e+6; // metres to micron
         const auto sigma2 = m_sigma2->eval(its).average();
         const auto w = Float(1) / sigma_min + Float(1) / sigma2;
         
@@ -297,15 +299,25 @@ public:
         return gx*gy;
     }
 
-    auto sampleScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &wi, const Point2 &sample) const {
-        const auto sigma_min = pltCtx.sigma_zz;
+    auto sampleScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &wi, Sampler &sampler) const {
+        const auto sigma_min = pltCtx.sigma_zz * 1e+6; // metres to micron
         const auto sigma2 = m_sigma2->eval(its).average();
         const auto w = Float(1) / sigma_min + Float(1) / sigma2;
         const auto k = Spectrum::ks().average();
         
+        return warp::squareToClampedGaussian(std::sqrt(w)/k, -Point2{ wi.x,wi.y }, sampler);
     }
 
-    Spectrum envelope(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx, EMeasure measure) const {
+    auto scatteredPdf(const Intersection &its, const PLTContext &pltCtx, const Vector3 &wi, const Vector3 &wo) const {
+        const auto sigma_min = pltCtx.sigma_zz * 1e+6; // metres to micron
+        const auto sigma2 = m_sigma2->eval(its).average();
+        const auto w = Float(1) / sigma_min + Float(1) / sigma2;
+        const auto k = Spectrum::ks().average();
+        
+        return warp::squareToClampedGaussianPdf(std::sqrt(w)/k, -Point2{ wi.x,wi.y }, Point2{ wo.x,wo.y });
+    }
+
+    Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0)
                 && measure == EDiscrete;
@@ -316,6 +328,8 @@ public:
         if ((!hasDirect && !hasScattered)
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
+        
+        Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
         const auto q = m_q->eval(bRec.its).average();
@@ -325,18 +339,13 @@ public:
         if (hasDirect) {
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return a * m00;
+            return Spectrum(.0f);
         }
-        else {
-            return costheta_o * sqr(q) * (Spectrum(1.f)-a) * m00 * 
-                    envelopeScattered(bRec.its, pltCtx, bRec.wo + bRec.wi);
-        }
+        return costheta_o * sqr(q) * (Spectrum(1.f)-a) * m00 * 
+                envelopeScattered(bRec.its, *bRec.pltCtx, bRec.wo + bRec.wi);
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, 
-        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
-        EMeasure measure) const {
-        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
-        
+    Spectrum eval(const BSDFSamplingRecord &bRec, RadiancePacket &radiancePacket, EMeasure measure) const { 
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0)
                 && measure == EDiscrete;
@@ -348,42 +357,54 @@ public:
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
         
+        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
+        Assert(!!bRec.pltCtx);
+        
         const auto m00 = m_specularReflectance->eval(bRec.its);
         const auto q = m_q->eval(bRec.its).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         const auto a = alpha(Frame::cosTheta(bRec.wi), q);
-
+        const auto m = normalize(bRec.wo+bRec.wi);
+        
+        // Rotate to sp-frame first
+        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
+        
         const auto& in = radiancePacket.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
+            // Mueller Fresnel pBSDF
+            const auto M = sqr(Spectrum::lambdas().average()/Spectrum::lambdas()[idx]) * 
+                           MuellerFresnelRConductor(dot(m,bRec.wi), m_eta[idx]);
+
             if (hasDirect) {
                 if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
                     return Spectrum(.0f);
                 
-                radiancePacket.L(idx) = a[idx] * m00[idx] * M * radiancePacket.S(idx);
+                radiancePacket.L(idx) = a[idx] * m00[idx] * ((Matrix4x4)M * radiancePacket.S(idx));
             }
             else {
                 const auto k = Spectrum::ks()[idx];
                 const auto h = k*(bRec.wo + bRec.wi);
-                const auto Dx = diffract(radiancePacket.invThetax(k,pltCtx.sigma_zz), sigma2, bRec.its.shFrame, h);
-                const auto Dy = diffract(radiancePacket.invThetay(k,pltCtx.sigma_zz), sigma2, bRec.its.shFrame, h);
-                const auto Dc = diffract(radiancePacket.invThetac(k,pltCtx.sigma_zz), sigma2, bRec.its.shFrame, h);
+                const auto Dx = diffract(radiancePacket.invThetax(k,bRec.pltCtx->sigma_zz), 
+                                         sigma2, bRec.its.shFrame, h);
+                const auto Dy = diffract(radiancePacket.invThetay(k,bRec.pltCtx->sigma_zz), 
+                                         sigma2, bRec.its.shFrame, h);
+                const auto Dc = diffract(radiancePacket.invThetac(k,bRec.pltCtx->sigma_zz), 
+                                         sigma2, bRec.its.shFrame, h);
                 
-                radiancePacket.L(idx) = costheta_o * sqr(q) * (1-a[idx]) * m00[idx] * M * 
-                               (Dx*radiancePacket.Sx(idx) + Dy*radiancePacket.Sy(idx) + Dc*radiancePacket.Sc(idx));
+                radiancePacket.L(idx) = costheta_o * sqr(q) * (1-a[idx]) * m00[idx] * ((Matrix4x4)M * 
+                               (Dx*radiancePacket.Sx(idx) + Dy*radiancePacket.Sy(idx) + Dc*radiancePacket.Sc(idx)));
             }
 
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = radiancePacket.L(idx)[0] / in[idx];
         }
-        
-        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
 
         return result;
     }
 
-    Float pdf(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx, EMeasure measure) const {
+    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0);
         const auto hasScattered = (bRec.typeMask & EScatteredReflection)
@@ -391,6 +412,8 @@ public:
 
         if (Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return 0.0f;
+
+        Assert(!!bRec.pltCtx);
 
         Float probDirect = hasDirect ? 1.0f : 0.0f;
         if (hasDirect && hasScattered) {
@@ -404,13 +427,13 @@ public:
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return probDirect;
         } else if (hasScattered && measure == ESolidAngle) {
-            return warp::squareToCosineHemispherePdf(bRec.wo) * (1-probDirect);
+            return scatteredPdf(bRec.its, *bRec.pltCtx, bRec.wi, bRec.wo) * (1-probDirect);
         }
 
         return 0.0f;
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, const PLTContext &pltCtx, const Point2 &sample) const {
+    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0);
         const auto hasScattered = (bRec.typeMask & EScatteredReflection)
@@ -418,6 +441,8 @@ public:
 
         if ((!hasScattered && !hasDirect) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
+
+        Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
         const auto q = m_q->eval(bRec.its).average();
@@ -436,7 +461,7 @@ public:
             } else {
                 bRec.sampledComponent = 1;
                 bRec.sampledType = EDirectReflection;
-                bRec.wo = sampleScattered(bRec.its, pltCtx, bRec.wi, bRec.sampler->next2D());
+                bRec.wo = sampleScattered(bRec.its, *bRec.pltCtx, bRec.wi, *bRec.sampler);
 
                 return sqr(q)/(1-probDirect) * (Spectrum(1.f)-a) * m00;
             }
@@ -448,7 +473,7 @@ public:
         } else {
             bRec.sampledComponent = 1;
             bRec.sampledType = EScatteredReflection;
-            bRec.wo = sampleScattered(bRec.its, pltCtx, bRec.wi, bRec.sampler->next2D());
+            bRec.wo = sampleScattered(bRec.its, *bRec.pltCtx, bRec.wi, *bRec.sampler);
 
             return sqr(q) * (Spectrum(1.f)-a) * m00;
         }

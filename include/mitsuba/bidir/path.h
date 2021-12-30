@@ -102,6 +102,7 @@ public:
      * \return The number of successful steps performed by the random walk.
      */
     int randomWalk(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         int nSteps, int rrStart, ETransportMode mode,
         MemoryPool &pool);
 
@@ -128,6 +129,7 @@ public:
      * \return The number of successful steps performed by the random walk.
      */
     int randomWalkFromPixel(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         int nSteps, const Point2i &pixelPosition, int rrStart,
         MemoryPool &pool);
 
@@ -172,7 +174,8 @@ public:
      *         on the emitter and sensor subpath, respectively.
      */
     static std::pair<int, int> alternatingRandomWalkFromPixel(const Scene *scene,
-        Sampler *sampler, Path &emitterPath, int nEmitterSteps,
+        Sampler *sampler, const PLTContext &pltCtx,
+        Path &emitterPath, int nEmitterSteps,
         Path &sensorPath, int nSensorSteps, const Point2i &pixelPosition,
         int rrStart, MemoryPool &pool);
 
@@ -414,6 +417,7 @@ public:
      *    in the rendering process.
      */
     static Float miWeight(const Scene *scene,
+            const PLTContext &pltCtx,
             const Path &emitterSubpath,
             const PathEdge *connectionEdge,
             const Path &sensorSubpath, int s, int t,

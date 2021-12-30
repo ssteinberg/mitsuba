@@ -107,7 +107,7 @@ public:
         return m_reflectance->eval(its);
     }
 
-    Spectrum envelope(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx, EMeasure measure) const {
+    Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
@@ -119,15 +119,14 @@ public:
         return costheta_o * m00;
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, 
-        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
-        EMeasure measure) const {
-        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
-
+    Spectrum eval(const BSDFSamplingRecord &bRec, RadiancePacket &radiancePacket, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0) 
             return Spectrum(.0f);
+
+        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
+        Assert(!!bRec.pltCtx);
 
         const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
         const auto M = Float(1);
@@ -147,7 +146,7 @@ public:
         return result;
     }
 
-    Float pdf(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx, EMeasure measure) const {
+    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
@@ -155,7 +154,7 @@ public:
         return warp::squareToCosineHemispherePdf(bRec.wo);
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, const PLTContext &pltCtx, const Point2 &sample) const {
+    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
         if (!(bRec.typeMask & EScatteredReflection) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
 

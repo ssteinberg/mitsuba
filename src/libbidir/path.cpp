@@ -28,6 +28,7 @@ void Path::initialize(const Scene *scene, Float time,
 }
 
 int Path::randomWalk(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         int nSteps, int rrStart, ETransportMode mode,
         MemoryPool &pool) {
     /* Determine the relevant edge and vertex to start the random walk */
@@ -43,7 +44,7 @@ int Path::randomWalk(const Scene *scene, Sampler *sampler,
         PathEdge *succEdge = pool.allocEdge();
 
         if (!curVertex->sampleNext(scene, sampler, predVertex, predEdge, succEdge,
-                succVertex, mode, rrStart != -1 && i >= rrStart, &throughput)) {
+                succVertex, pltCtx, mode, rrStart != -1 && i >= rrStart, &throughput)) {
             pool.release(succVertex);
             pool.release(succEdge);
             return i;
@@ -60,6 +61,7 @@ int Path::randomWalk(const Scene *scene, Sampler *sampler,
 }
 
 int Path::randomWalkFromPixel(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         int nSteps, const Point2i &pixelPosition, int rrStart, MemoryPool &pool) {
 
     PathVertex *v1 = pool.allocVertex(), *v2 = pool.allocVertex();
@@ -95,7 +97,7 @@ int Path::randomWalkFromPixel(const Scene *scene, Sampler *sampler,
         PathEdge *succEdge = pool.allocEdge();
 
         if (!curVertex->sampleNext(scene, sampler, predVertex, predEdge, succEdge,
-                succVertex, ERadiance, rrStart != -1 && t >= rrStart, &throughput)) {
+                succVertex, pltCtx, ERadiance, rrStart != -1 && t >= rrStart, &throughput)) {
             pool.release(succVertex);
             pool.release(succEdge);
             return t;
@@ -113,6 +115,7 @@ int Path::randomWalkFromPixel(const Scene *scene, Sampler *sampler,
 
 
 std::pair<int, int> Path::alternatingRandomWalkFromPixel(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         Path &emitterPath, int nEmitterSteps, Path &sensorPath, int nSensorSteps,
         const Point2i &pixelPosition, int rrStart, MemoryPool &pool) {
     /* Determine the relevant edges and vertices to start the random walk */
@@ -156,7 +159,7 @@ std::pair<int, int> Path::alternatingRandomWalkFromPixel(const Scene *scene, Sam
             PathEdge *succEdgeT = pool.allocEdge();
 
             if (curVertexT->sampleNext(scene, sampler, predVertexT,
-                    predEdgeT, succEdgeT, succVertexT, ERadiance,
+                    predEdgeT, succEdgeT, succVertexT, pltCtx, ERadiance,
                     rrStart != -1 && t >= rrStart, &throughputT)) {
                 sensorPath.append(succEdgeT, succVertexT);
                 predVertexT = curVertexT;
@@ -177,7 +180,7 @@ std::pair<int, int> Path::alternatingRandomWalkFromPixel(const Scene *scene, Sam
             PathEdge *succEdgeS = pool.allocEdge();
 
             if (curVertexS->sampleNext(scene, sampler, predVertexS,
-                    predEdgeS, succEdgeS, succVertexS, EImportance,
+                    predEdgeS, succEdgeS, succVertexS, pltCtx, EImportance,
                     rrStart != -1 && s >= rrStart, &throughputS)) {
                 emitterPath.append(succEdgeS, succVertexS);
                 predVertexS = curVertexS;
@@ -263,8 +266,9 @@ bool Path::operator==(const Path &path) const {
     return true;
 }
 
-Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
-        const PathEdge *connectionEdge, const Path &sensorSubpath,
+Float Path::miWeight(const Scene *scene, 
+        const PLTContext &pltCtx,
+        const Path &emitterSubpath, const PathEdge *connectionEdge, const Path &sensorSubpath,
         int s, int t, bool sampleDirect, bool lightImage) {
     int k = s+t+1, n = k+1;
 
@@ -335,11 +339,11 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
         pdfImp[pos++] = emitterSubpath.vertex(i)->pdf[EImportance]
             * emitterSubpath.edge(i)->pdf[EImportance];
 
-    pdfImp[pos++] = vs->evalPdf(scene, vsPred, vt, EImportance, vsMeasure)
+    pdfImp[pos++] = vs->evalPdf(scene, vsPred, vt, pltCtx, EImportance, vsMeasure)
         * connectionEdge->pdf[EImportance];
 
     if (t > 0) {
-        pdfImp[pos++] = vt->evalPdf(scene, vs, vtPred, EImportance, vtMeasure)
+        pdfImp[pos++] = vt->evalPdf(scene, vs, vtPred, pltCtx, EImportance, vtMeasure)
             * sensorSubpath.edge(t-1)->pdf[EImportance];
 
         for (int i=t-1; i>0; --i)
@@ -354,11 +358,11 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
             pdfRad[pos++] = emitterSubpath.vertex(i+1)->pdf[ERadiance]
                 * emitterSubpath.edge(i)->pdf[ERadiance];
 
-        pdfRad[pos++] = vs->evalPdf(scene, vt, vsPred, ERadiance, vsMeasure)
+        pdfRad[pos++] = vs->evalPdf(scene, vt, vsPred, pltCtx, ERadiance, vsMeasure)
             * emitterSubpath.edge(s-1)->pdf[ERadiance];
     }
 
-    pdfRad[pos++] = vt->evalPdf(scene, vtPred, vs, ERadiance, vtMeasure)
+    pdfRad[pos++] = vt->evalPdf(scene, vtPred, vs, pltCtx, ERadiance, vtMeasure)
         * connectionEdge->pdf[ERadiance];
 
     for (int i=t; i>0; --i)

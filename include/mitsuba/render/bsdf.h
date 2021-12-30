@@ -63,8 +63,12 @@ public:
      * \param mode
      *      The transported mode (\ref ERadiance or \ref EImportance)
      */
-    explicit inline BSDFSamplingRecord(const Intersection &its, Sampler *sampler,
-            ETransportMode mode = ERadiance);
+    explicit BSDFSamplingRecord(const Intersection &its, Sampler *sampler,
+        ETransportMode mode = ERadiance);
+    inline explicit BSDFSamplingRecord(const Intersection &its, Sampler *sampler, const PLTContext &pltCtx,
+        ETransportMode mode = ERadiance) : BSDFSamplingRecord(its,sampler,mode) {
+        this->pltCtx = &pltCtx;
+    }
 
     /**
      * \brief Given a surface interaction an an incident/exitant direction
@@ -83,8 +87,12 @@ public:
      * \param mode
      *      The transported mode (\ref ERadiance or \ref EImportance)
      */
-    inline BSDFSamplingRecord(const Intersection &its, const Vector &wo,
+    explicit BSDFSamplingRecord(const Intersection &its, const Vector &wo,
         ETransportMode mode = ERadiance);
+    inline explicit BSDFSamplingRecord(const Intersection &its, const Vector &wo, const PLTContext &pltCtx,
+        ETransportMode mode = ERadiance) : BSDFSamplingRecord(its,wo,mode) {
+        this->pltCtx = &pltCtx;
+    }
 
     /**
      * \brief Given a surface interaction an an incident/exitant direction
@@ -105,9 +113,13 @@ public:
      *      The transported mode (\ref ERadiance or \ref EImportance)
      *
      */
-    inline BSDFSamplingRecord(const Intersection &its,
+    explicit BSDFSamplingRecord(const Intersection &its,
         const Vector &wi, const Vector &wo,
         ETransportMode mode = ERadiance);
+    inline explicit BSDFSamplingRecord(const Intersection &its, const Vector &wi, const Vector &wo, 
+        const PLTContext &pltCtx, ETransportMode mode = ERadiance) : BSDFSamplingRecord(its,wi,wo,mode) {
+        this->pltCtx = &pltCtx;
+    }
 
     /**
      * \brief Reverse the direction of light transport in the record
@@ -121,6 +133,8 @@ public:
     /// Return a string representation
     std::string toString() const;
 public:
+    const PLTContext *pltCtx{ nullptr };
+    
     /// Reference to the underlying surface interaction
     const Intersection &its;
 
@@ -352,11 +366,9 @@ public:
      *         factor when a non-delta component is sampled). A zero spectrum
      *         means that sampling failed.
      */
-    virtual Spectrum sample(BSDFSamplingRecord &bRec, const PLTContext &pltCtx,
-        const Point2 &sample) const = 0;
+    virtual Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const = 0;
     
-    virtual Float pdf(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx,
-        EMeasure measure = ESolidAngle) const = 0;
+    virtual Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure = ESolidAngle) const = 0;
 
     /**
      * \brief Evaluate the BSDF f(wi, wo) or its adjoint version f^{*}(wi, wo)
@@ -375,12 +387,10 @@ public:
      *     different measures. (E.g. a diffuse material with an
      *     ideally smooth dielectric coating).
      */
-    virtual Spectrum envelope(const BSDFSamplingRecord &bRec, const PLTContext &pltCtx,
-        EMeasure measure = ESolidAngle) const = 0;
+    virtual Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure = ESolidAngle) const = 0;
     
     virtual Spectrum eval(const BSDFSamplingRecord &bRec,
-        RadiancePacket &radiancePacket, const PLTContext &pltCtx,
-        EMeasure measure = ESolidAngle) const = 0;
+        RadiancePacket &radiancePacket, EMeasure measure = ESolidAngle) const = 0;
 
     /**
      * \brief For transmissive BSDFs: return the material's

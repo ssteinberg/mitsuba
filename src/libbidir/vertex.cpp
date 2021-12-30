@@ -36,7 +36,7 @@ void PathVertex::makeEndpoint(const Scene *scene, Float time, ETransportMode mod
 
 bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
         const PathVertex *pred, const PathEdge *predEdge,
-        PathEdge *succEdge, PathVertex *succ,
+        PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         ETransportMode mode, bool russianRoulette, Spectrum *throughput) {
     Ray ray;
 
@@ -155,7 +155,7 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                 Vector wo;
 
                 /* Sample the BSDF */
-                BSDFSamplingRecord bRec(its, sampler, mode);
+                BSDFSamplingRecord bRec(its, sampler, pltCtx, mode);
                 bRec.wi = its.toLocal(wi);
                 weight[mode] = bsdf->sample(bRec, sampler->next2D());
                 pdf[mode]    = bsdf->pdf(bRec);
@@ -479,7 +479,7 @@ Float PathVertex::perturbPositionPdf(const PathVertex *target, Float stddev) con
 }
 
 bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
-    const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ,
+    const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
     const Vector &d, Float dist, EVertexType desiredType, ETransportMode mode) {
     Ray ray(getPosition(), d, pred->getTime());
 
@@ -545,7 +545,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
                 Vector wi = normalize(pred->getPosition() - its.p);
                 Vector wo(d);
 
-                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), mode);
+                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), pltCtx, mode);
 
                 Spectrum value = bsdf->envelope(bRec);
                 Float prob = bsdf->pdf(bRec);
@@ -664,7 +664,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
 }
 
 bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pred,
-        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ,
+        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         unsigned int componentType_, Float dist, EVertexType desiredType, ETransportMode mode) {
     BDAssert(isSurfaceInteraction());
 
@@ -678,7 +678,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
 
     Vector wi = normalize(pred->getPosition() - its.p);
 
-    BSDFSamplingRecord bRec(its, NULL, mode);
+    BSDFSamplingRecord bRec(its, NULL, pltCtx, mode);
     bRec.typeMask = componentType_;
 
     bRec.wi = its.toLocal(wi);
@@ -761,7 +761,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
 }
 
 Spectrum PathVertex::envelope(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, 
+        const PathVertex *succ, const PLTContext &pltCtx, ETransportMode mode, 
         EMeasure measure) const {
     Spectrum result(0.0f);
     Vector wo(0.0f);
@@ -906,19 +906,19 @@ bool PathVertex::update(const Scene *scene, const PathVertex *pred,
     if (!isSurfaceInteraction() && !isMediumInteraction()) {
         if (noninteraction_mode==EImportance) {
             if (evalResult)
-                *evalResult *= envelope(scene, pred, succ, EImportance);
-            return update(scene, pred, succ, EImportance, measure);
+                *evalResult *= envelope(scene, pred, succ, pltCtx, EImportance);
+            return update(scene, pred, succ, pltCtx, EImportance, measure);
         }
         else {
             if (evalResult)
-                *evalResult *= envelope(scene, succ, pred, ERadiance);
-            return update(scene, succ, pred, ERadiance, measure);
+                *evalResult *= envelope(scene, succ, pred, pltCtx, ERadiance);
+            return update(scene, succ, pred, pltCtx, ERadiance, measure);
         }
     }
 
     const auto mode = ERadiance;
-    pdf[mode]       = evalPdf(scene, pred, succ, mode, measure);
-    pdf[1-mode]     = evalPdf(scene, succ, pred, (ETransportMode) (1-mode), measure);
+    pdf[mode]       = evalPdf(scene, pred, succ, pltCtx, mode, measure);
+    pdf[1-mode]     = evalPdf(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
     weight[mode]    = result;
     weight[1-mode]  = result;
 
@@ -1045,7 +1045,7 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 wo = normalize(succP - its.p);
 
                 BSDFSamplingRecord bRec(its, its.toLocal(wi),
-                        its.toLocal(wo), ERadiance);
+                        its.toLocal(wo), pltCtx, ERadiance);
 
                 if (measure == EArea)
                     measure = ESolidAngle;
@@ -1058,7 +1058,7 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                     woDotGeoN * Frame::cosTheta(bRec.wo) <= 0)
                     return Spectrum(.0f);
 
-                result = bsdf->eval(bRec, *radiancePacket, pltCtx, measure);
+                result = bsdf->eval(bRec, *radiancePacket, measure);
                 
                 auto terms = std::abs(
                     (Frame::cosTheta(bRec.wi) * woDotGeoN) /
@@ -1102,7 +1102,8 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
 }
 
 Float PathVertex::evalPdf(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure) const {
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, EMeasure measure) const {
     Vector wo(0.0f);
     Float dist = 0.0f, result = 0.0f;
 
@@ -1164,7 +1165,7 @@ Float PathVertex::evalPdf(const Scene *scene, const PathVertex *pred,
                 Point predP = pred->getPosition();
                 Vector wi = normalize(predP - its.p);
 
-                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), mode);
+                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), pltCtx, mode);
                 result = bsdf->pdf(bRec, measure == EArea ? ESolidAngle : measure);
 
                 /* Prevent light leaks due to the use of shading normals */
@@ -1352,12 +1353,13 @@ bool PathVertex::cast(const Scene *scene, EVertexType desired) {
 }
 
 bool PathVertex::update(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure) {
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, EMeasure measure) {
 
-    pdf[mode]       = evalPdf(scene, pred, succ, mode, measure);
-    pdf[1-mode]     = evalPdf(scene, succ, pred, (ETransportMode) (1-mode), measure);
-    weight[mode]    = envelope(scene, pred, succ, mode, measure);
-    weight[1-mode]  = envelope(scene, succ, pred, (ETransportMode) (1-mode), measure);
+    pdf[mode]       = evalPdf(scene, pred, succ, pltCtx, mode, measure);
+    pdf[1-mode]     = evalPdf(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
+    weight[mode]    = envelope(scene, pred, succ, pltCtx, mode, measure);
+    weight[1-mode]  = envelope(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
 
     if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
         return false;
@@ -1505,7 +1507,8 @@ bool PathVertex::getSamplePosition(const PathVertex *v, Point2 &result) const {
 bool PathVertex::connect(const Scene *scene,
         const PathVertex *pred, const PathEdge *predEdge,
         PathVertex *vs, PathEdge *edge, PathVertex *vt,
-        const PathEdge *succEdge, const PathVertex *succ) {
+        const PathEdge *succEdge, const PathVertex *succ,
+        const PLTContext &pltCtx) {
 
     if (vs->isEmitterSupernode()) {
         if (!vt->cast(scene, PathVertex::EEmitterSample))
@@ -1523,10 +1526,10 @@ bool PathVertex::connect(const Scene *scene,
     if (vs->isDegenerate() || vt->isDegenerate())
         return false;
 
-    if (!vs->update(scene, pred, vt, EImportance))
+    if (!vs->update(scene, pred, vt, pltCtx, EImportance))
         return false;
 
-    if (!vt->update(scene, succ, vs, ERadiance))
+    if (!vt->update(scene, succ, vs, pltCtx, ERadiance))
         return false;
 
     return edge->connect(scene, predEdge, vs, vt, succEdge);
@@ -1536,6 +1539,7 @@ bool PathVertex::connect(const Scene *scene,
         const PathVertex *pred, const PathEdge *predEdge,
         PathVertex *vs, PathEdge *edge, PathVertex *vt,
         const PathEdge *succEdge, const PathVertex *succ,
+        const PLTContext &pltCtx,
         EMeasure vsMeasure, EMeasure vtMeasure) {
 
     if (vs->isEmitterSupernode()) {
@@ -1547,10 +1551,10 @@ bool PathVertex::connect(const Scene *scene,
             return false;
     }
 
-    if (!vs->update(scene, pred, vt, EImportance, vsMeasure))
+    if (!vs->update(scene, pred, vt, pltCtx, EImportance, vsMeasure))
         return false;
 
-    if (!vt->update(scene, succ, vs, ERadiance, vtMeasure))
+    if (!vt->update(scene, succ, vs, pltCtx, ERadiance, vtMeasure))
         return false;
 
     return edge->connect(scene, predEdge, vs, vt, succEdge);

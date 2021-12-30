@@ -94,6 +94,7 @@ Spectrum Spectrum::rgbIllum2SpecBlue;
 /* Covered wavelength range of each spectral bin */
 Float Spectrum::m_wavelengths[SPECTRUM_SAMPLES + 1];
 #endif
+Spectrum Spectrum::m_lambdas, Spectrum::m_ks;
 
 /// Pre-integrated D65 illuminant
 Spectrum Spectrum::CIE_D65;

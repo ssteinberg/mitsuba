@@ -45,6 +45,15 @@ namespace warp {
     /// Uniformly sample a vector on the unit hemisphere with respect to solid angles
     extern MTS_EXPORT_CORE Vector squareToUniformHemisphere(const Point2 &sample);
 
+    inline auto diskToCosineHemisphere(const Point2 &p) {
+        Float z = math::safe_sqrt(1.0f - p.x*p.x - p.y*p.y);
+        /* Guard against numerical imprecisions */
+        if (EXPECT_NOT_TAKEN(z == 0))
+            z = 1e-10f;
+
+        return Vector(p.x, p.y, z);
+    }
+
     /// Density of \ref squareToUniformHemisphere() with respect to solid angles
     extern MTS_EXPORT_CORE inline Float squareToUniformHemispherePdf() { return INV_TWOPI; }
 
@@ -109,6 +118,10 @@ namespace warp {
 
     /// Density of \ref squareToStdNormal per unit area
     extern MTS_EXPORT_CORE Float squareToStdNormalPdf(const Point2 &pos);
+
+    /// Gaussians clamped to unit disk
+    extern MTS_EXPORT_CORE Vector squareToClampedGaussian(Float stddev, Point2 mean, Sampler &sampler);
+    extern MTS_EXPORT_CORE Float squareToClampedGaussianPdf(Float stddev, Point2 mean, const Point2 &pos);
 
     /// Warp a uniformly distributed square sample to a 2D tent distribution
     extern MTS_EXPORT_CORE Point2 squareToTent(const Point2 &sample);
