@@ -844,7 +844,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
      *     Specifies the direction of light transport
      * \return \c false when there is no throughput
      */
-    bool update(const Scene *scene, const PathVertex *pred,
+    bool updateEnvelope(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, const PLTContext &pltCtx, 
         ETransportMode mode, EMeasure measure = EArea);
 

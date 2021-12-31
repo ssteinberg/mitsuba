@@ -164,10 +164,12 @@ Float squareToClampedGaussianPdf(Float stddev, Point2 mean, const Point2 &pos) {
     const auto pdfymin = std::erf((-ymax-mean.y) / stddev);
     const auto pdfymax = std::erf(( ymax-mean.y) / stddev);
 
-    const auto r = (pdfxmax-pdfxmin) * (pdfymax-pdfymin);
-    if (r>RCPOVERFLOW)
-        return squareToStdNormalPdf({ p.x,p.y }) / r;
-    return 1;
+    const auto r = (pdfxmax-pdfxmin) * (pdfymax-pdfymin) / 4;
+    const Float pdf = r>RCPOVERFLOW ?
+        squareToStdNormalPdf({ p.x,p.y }) / r :
+        1;
+        
+    return pdf;
 }
 
 static Float intervalToTent(Float sample) {

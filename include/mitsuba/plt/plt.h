@@ -159,11 +159,11 @@ struct RadiancePacket {
 
 inline auto sourceLight(Spectrum emission, const PLTContext &ctx) {
     RadiancePacket rad{};
-    rad.r = 0;
-    const auto c = ctx.Omega/(2*M_PI*ctx.A);
     for (auto i=0;i<SPECTRUM_SAMPLES;++i) 
         rad.ls[i] = Vector4{ emission[i],0,0,0 };
+    const auto c = 2*M_PI*ctx.Omega/ctx.A;
     rad.T_x = rad.T_y = Matrix2x2(c,0,0,c);
+    rad.r = 0;
     
     return rad;
 }

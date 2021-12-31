@@ -224,16 +224,16 @@ public:
     }
 
     void configure() {
-        unsigned int extraFlagsDirect = 0;
+        unsigned int extraFlags = 0;
         unsigned int extraFlagsScattered = 0;
-        if (!m_q->isConstant() || !m_sigma2->isConstant() || !m_specularReflectance->isConstant())
+        if (!m_q->isConstant() || !m_specularReflectance->isConstant())
+            extraFlags |= ESpatiallyVarying;
+        if (!m_sigma2->isConstant())
             extraFlagsScattered |= ESpatiallyVarying;
-        if (!m_specularReflectance->isConstant())
-            extraFlagsDirect |= ESpatiallyVarying;
 
         m_components.clear();
-        m_components.push_back(EDirectReflection | EFrontSide | extraFlagsDirect);
-        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlagsScattered);
+        m_components.push_back(EDirectReflection | EFrontSide | extraFlags);
+        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlags | extraFlagsScattered);
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
@@ -264,27 +264,31 @@ public:
     }
     
     inline auto alpha(const Float costhetai, const Float q) const {
-        const auto a = -sqr(2 * costhetai * q) * Spectrum::ks() * Spectrum::ks();
+        const auto a = -sqr(costhetai * q) * Spectrum::ks() * Spectrum::ks();
         return a.exp();
     }
 
-    inline auto diffract(const Matrix3x3& invSigma, Float sigma2, const Frame &f, const Vector3 &h) const {
-        Matrix3x3 Q = Matrix3x3(f.s,f.t,f.n), Qt;
+    inline auto diffract(const Matrix3x3& invSigma, Float sigma2, const Intersection &its, const Vector3 &h) const {
+        Matrix3x3 Q = Matrix3x3(its.toWorld(Vector3{ 1,0,0 }),
+                                its.toWorld(Vector3{ 0,1,0 }),
+                                its.toWorld(Vector3{ 0,0,1 })), Qt;
         Q.transpose(Qt);
         const auto& invTheta = Q*invSigma*Qt;
         const auto& invTheta2x2 = Matrix2x2(invTheta.m[0][0], invTheta.m[0][1],
                                             invTheta.m[0][1], invTheta.m[1][1]);
         
-        const Matrix2x2& S = invTheta2x2 + (Float(1)/sigma2) * Matrix2x2(1,0,0,1);
+        const Matrix2x2& S = invTheta2x2 + (1.f/sigma2) * Matrix2x2(1,0,0,1);
         Matrix2x2 invS;
-        S.invert2x2(invS);
-        const auto& h2 = Vector2(h.x,h.y);
+        if (!S.invert2x2(invS))
+            return Float(0);
 
-        return Float(.5)*INV_PI/std::sqrt(S.det()) * std::exp(-Float(.5)*dot(h2,invS*h2));
+        const auto& h2 = Vector2(h.x,h.y);
+        return Float(.5)*INV_PI*std::sqrt(invS.det()) * 
+                std::exp(-Float(.5)*dot(h2,invS*h2));
     }
 
     auto envelopeScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &h) const {
-        const auto sigma_min = pltCtx.sigma_zz * 1e+6; // metres to micron
+        const auto sigma_min = pltCtx.sigma_zz * 1e+6f; // metres to micron
         const auto sigma2 = m_sigma2->eval(its).average();
         const auto w = Float(1) / sigma_min + Float(1) / sigma2;
         
@@ -300,7 +304,7 @@ public:
     }
 
     auto sampleScattered(const Intersection &its, const PLTContext &pltCtx, const Vector3 &wi, Sampler &sampler) const {
-        const auto sigma_min = pltCtx.sigma_zz * 1e+6; // metres to micron
+        const auto sigma_min = pltCtx.sigma_zz * 1e+6f; // metres to micron
         const auto sigma2 = m_sigma2->eval(its).average();
         const auto w = Float(1) / sigma_min + Float(1) / sigma2;
         const auto k = Spectrum::ks().average();
@@ -309,7 +313,7 @@ public:
     }
 
     auto scatteredPdf(const Intersection &its, const PLTContext &pltCtx, const Vector3 &wi, const Vector3 &wo) const {
-        const auto sigma_min = pltCtx.sigma_zz * 1e+6; // metres to micron
+        const auto sigma_min = pltCtx.sigma_zz * 1e+6f; // metres to micron
         const auto sigma2 = m_sigma2->eval(its).average();
         const auto w = Float(1) / sigma_min + Float(1) / sigma2;
         const auto k = Spectrum::ks().average();
@@ -374,8 +378,7 @@ public:
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
             // Mueller Fresnel pBSDF
-            const auto M = sqr(Spectrum::lambdas().average()/Spectrum::lambdas()[idx]) * 
-                           MuellerFresnelRConductor(dot(m,bRec.wi), m_eta[idx]);
+            const auto M = MuellerFresnelRConductor(dot(m,bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
 
             if (hasDirect) {
                 if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
@@ -385,13 +388,14 @@ public:
             }
             else {
                 const auto k = Spectrum::ks()[idx];
+                const auto k_m = k * 1e+6f; // in metres
                 const auto h = k*(bRec.wo + bRec.wi);
-                const auto Dx = diffract(radiancePacket.invThetax(k,bRec.pltCtx->sigma_zz), 
-                                         sigma2, bRec.its.shFrame, h);
-                const auto Dy = diffract(radiancePacket.invThetay(k,bRec.pltCtx->sigma_zz), 
-                                         sigma2, bRec.its.shFrame, h);
-                const auto Dc = diffract(radiancePacket.invThetac(k,bRec.pltCtx->sigma_zz), 
-                                         sigma2, bRec.its.shFrame, h);
+                const auto Dx = diffract(radiancePacket.invThetax(k_m,bRec.pltCtx->sigma_zz), 
+                                         sigma2, bRec.its, h);
+                const auto Dy = diffract(radiancePacket.invThetay(k_m,bRec.pltCtx->sigma_zz), 
+                                         sigma2, bRec.its, h);
+                const auto Dc = diffract(radiancePacket.invThetac(k_m,bRec.pltCtx->sigma_zz), 
+                                         sigma2, bRec.its, h);
                 
                 radiancePacket.L(idx) = costheta_o * sqr(q) * (1-a[idx]) * m00[idx] * ((Matrix4x4)M * 
                                (Dx*radiancePacket.Sx(idx) + Dy*radiancePacket.Sy(idx) + Dc*radiancePacket.Sc(idx)));
@@ -426,7 +430,7 @@ public:
                specular reflection; tolerate some roundoff errors */
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return probDirect;
-        } else if (hasScattered && measure == ESolidAngle) {
+        } else if (hasScattered && measure == ESolidAngle && probDirect<1) {
             return scatteredPdf(bRec.its, *bRec.pltCtx, bRec.wi, bRec.wo) * (1-probDirect);
         }
 
@@ -452,7 +456,7 @@ public:
         if (hasScattered && hasDirect) {
             const auto probDirect = a.average();
 
-            if (sample.x < probDirect) {
+            if (probDirect==1 || sample.x < probDirect) {
                 bRec.sampledComponent = 0;
                 bRec.sampledType = EDirectReflection;
                 bRec.wo = reflect(bRec.wi);
@@ -460,7 +464,7 @@ public:
                 return Float(1)/probDirect * a * m00;
             } else {
                 bRec.sampledComponent = 1;
-                bRec.sampledType = EDirectReflection;
+                bRec.sampledType = EScatteredReflection;
                 bRec.wo = sampleScattered(bRec.its, *bRec.pltCtx, bRec.wi, *bRec.sampler);
 
                 return sqr(q)/(1-probDirect) * (Spectrum(1.f)-a) * m00;

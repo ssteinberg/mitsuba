@@ -154,14 +154,8 @@ public:
                     *vs = emitterSubpath.vertex(s),
                     *vsPred = emitterSubpath.vertexOrNull(s-1),
                     *vsNext = emitterSubpath.vertexOrNull(s+1);
-            
-                /* Temporarily force vertex measure to EArea. Needed to
-                   handle BSDFs with diffuse + specular components */
-                RestoreMeasureHelper rmhvs(vs);
-                if (!vs->isEmitterSupernode())
-                    vs->measure = EArea;
                 
-                if (!vs->update(scene, vsPred, vsNext, &rp, m_config.pltCtx, EImportance)) {
+                if (!vs->update(scene, vsPred, vsNext, &rp, m_config.pltCtx, EImportance, nullptr, vs->measure)) {
                     maxS = s;
                     break;
                 }
@@ -191,10 +185,6 @@ public:
             if (m_config.maxDepth != -1)
                 maxT = std::min(maxT, m_config.maxDepth + 1 - s);
 
-            RestoreMeasureHelper rmhvs(vs);
-            if (!vs->isEmitterSupernode())
-                vs->measure = EArea;
-
             for (int t = maxT; t >= minT; --t) {
                 PathVertex *vt = sensorSubpath.vertex(t);
                 PathVertex *vtNext = sensorSubpath.vertexOrNull(t-1);
@@ -205,6 +195,8 @@ public:
                 Spectrum value = sweights[s];
                 if (value.isZero())
                     continue;
+
+                RestoreMeasureHelper rmhvs(vs), rmhvt(vt);
 
                 /* Account for the terms of the measurement contribution
                    function that are coupled to the connection endpoints */
@@ -230,6 +222,21 @@ public:
                 /* Determine the pixel sample position when necessary */
                 if (vt->isSensorSample() && !vt->getSamplePosition(vs, samplePos))
                     continue;
+                
+                // Propagate coherence information and update all weights
+                RadiancePacket rp = s>0 ? rps[s-1] : RadiancePacket{};
+                if (!vs->update(scene, vsPred, vt, 
+                                &rp, m_config.pltCtx, EImportance, &value) ||
+                    !vt->update(scene, vs, vtNext, 
+                                &rp, m_config.pltCtx, ERadiance, &value))
+                    continue;
+
+                /* Temporarily force vertex measure to EArea. Needed to
+                   handle BSDFs with diffuse + specular components */
+                if (!vs->isEmitterSupernode())
+                    vs->measure = EArea;
+                if (!vt->isSensorSupernode())
+                    vt->measure = EArea;
 
                 /* Attempt to connect the two endpoints, which could result in
                    the creation of additional vertices (index-matched boundaries etc.) */
@@ -238,24 +245,14 @@ public:
                         scene, vsEdge, vs, vt, vtEdge, interactions))
                     continue;
 
-                // Propagate coherence information and update all weights
-                RadiancePacket rp = s>0 ? rps[s-1] : RadiancePacket{};
-                if (!vs->update(scene, vsPred, vt, 
-                                &rp, m_config.pltCtx, EImportance, &value) ||
-                    !vt->update(scene, vs, vtNext, 
-                                &rp, m_config.pltCtx, ERadiance, &value))
-                    continue;
+                // Finish evaluating the chain
                 for (int tt = t-1; tt>=std::max(1,minT); --tt) {
                     PathVertex 
                         *vtt = sensorSubpath.vertex(tt),
                         *vttPred = sensorSubpath.vertexOrNull(tt+1),
                         *vttNext = sensorSubpath.vertexOrNull(tt-1);
                 
-                    RestoreMeasureHelper rmhvtt(vtt);
-                    if (!vtt->isSensorSupernode())
-                        vtt->measure = EArea;
-
-                    vtt->update(scene, vttPred, vttNext, &rp, m_config.pltCtx, ERadiance);
+                    vtt->update(scene, vttPred, vttNext, &rp, m_config.pltCtx, ERadiance, nullptr, vtt->measure);
                     
                     value *=
                         vtt->weight[ERadiance] *

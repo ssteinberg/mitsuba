@@ -907,12 +907,12 @@ bool PathVertex::update(const Scene *scene, const PathVertex *pred,
         if (noninteraction_mode==EImportance) {
             if (evalResult)
                 *evalResult *= envelope(scene, pred, succ, pltCtx, EImportance);
-            return update(scene, pred, succ, pltCtx, EImportance, measure);
+            return updateEnvelope(scene, pred, succ, pltCtx, EImportance, measure);
         }
         else {
             if (evalResult)
                 *evalResult *= envelope(scene, succ, pred, pltCtx, ERadiance);
-            return update(scene, succ, pred, pltCtx, ERadiance, measure);
+            return updateEnvelope(scene, succ, pred, pltCtx, ERadiance, measure);
         }
     }
 
@@ -1352,7 +1352,7 @@ bool PathVertex::cast(const Scene *scene, EVertexType desired) {
     }
 }
 
-bool PathVertex::update(const Scene *scene, const PathVertex *pred,
+bool PathVertex::updateEnvelope(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, const PLTContext &pltCtx, 
         ETransportMode mode, EMeasure measure) {
 
@@ -1526,10 +1526,10 @@ bool PathVertex::connect(const Scene *scene,
     if (vs->isDegenerate() || vt->isDegenerate())
         return false;
 
-    if (!vs->update(scene, pred, vt, pltCtx, EImportance))
+    if (!vs->updateEnvelope(scene, pred, vt, pltCtx, EImportance))
         return false;
 
-    if (!vt->update(scene, succ, vs, pltCtx, ERadiance))
+    if (!vt->updateEnvelope(scene, succ, vs, pltCtx, ERadiance))
         return false;
 
     return edge->connect(scene, predEdge, vs, vt, succEdge);
@@ -1551,10 +1551,10 @@ bool PathVertex::connect(const Scene *scene,
             return false;
     }
 
-    if (!vs->update(scene, pred, vt, pltCtx, EImportance, vsMeasure))
+    if (!vs->updateEnvelope(scene, pred, vt, pltCtx, EImportance, vsMeasure))
         return false;
 
-    if (!vt->update(scene, succ, vs, pltCtx, ERadiance, vtMeasure))
+    if (!vt->updateEnvelope(scene, succ, vs, pltCtx, ERadiance, vtMeasure))
         return false;
 
     return edge->connect(scene, predEdge, vs, vt, succEdge);
