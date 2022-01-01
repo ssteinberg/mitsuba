@@ -5,8 +5,8 @@ DISTDIR        = '#dist'
 CXX            = 'g++'
 CC             = 'gcc'
 CXXFLAGS       = ['-O3', '-Wall', '-pipe', '-march=native', '-msse2', '-ftree-vectorize', '-mfpmath=sse', '-funsafe-math-optimizations', '-fno-rounding-math', '-fno-signaling-nans', '-fno-math-errno', '-fomit-frame-pointer', '-DMTS_DEBUG', '-DSINGLE_PRECISION', '-DSPECTRUM_SAMPLES=16', '-DMTS_SSE', '-DMTS_HAS_COHERENT_RT', '-fopenmp', '-fvisibility=hidden', '-mtls-dialect=gnu2','-fPIC']
-BUILDDIR       = '#build/debug'
-CXXFLAGS       = ['-O0', '-Wall', '-g', '-pipe', '-march=native', '-msse2', '-ftree-vectorize', '-mfpmath=sse', '-funsafe-math-optimizations', '-fno-rounding-math', '-fno-signaling-nans', '-fno-math-errno', '-fomit-frame-pointer', '-DMTS_DEBUG', '-DSINGLE_PRECISION', '-DSPECTRUM_SAMPLES=16', '-DMTS_SSE', '-DMTS_HAS_COHERENT_RT', '-fopenmp', '-fvisibility=hidden', '-mtls-dialect=gnu2','-fPIC']
+# BUILDDIR       = '#build/debug'
+# CXXFLAGS       = ['-O0', '-Wall', '-g', '-pipe', '-march=native', '-msse2', '-ftree-vectorize', '-mfpmath=sse', '-funsafe-math-optimizations', '-fno-rounding-math', '-fno-signaling-nans', '-fno-math-errno', '-fomit-frame-pointer', '-DMTS_DEBUG', '-DSINGLE_PRECISION', '-DSPECTRUM_SAMPLES=16', '-DMTS_SSE', '-DMTS_HAS_COHERENT_RT', '-fopenmp', '-fvisibility=hidden', '-mtls-dialect=gnu2','-fPIC']
 LINKFLAGS      = []
 SHLINKFLAGS    = ['-rdynamic', '-shared', '-fPIC', '-lstdc++']
 BASEINCLUDE    = ['#include','/usr/include/x86_64-linux-gnu/qt5']

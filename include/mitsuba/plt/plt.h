@@ -25,7 +25,8 @@ struct PLTContext {
 
 struct RadiancePacket {
     std::array<Vector4,SPECTRUM_SAMPLES> ls{};
-    Matrix2x2 T_x{}, T_y{};     // Shape matrices
+    // Matrix2x2 T_x{}, T_y{};     // Shape matrices
+    Matrix2x2 T{};
     Frame f{};                  // Reference frame
     Float r{};
     
@@ -37,8 +38,9 @@ struct RadiancePacket {
     }
 
     inline RadiancePacket() noexcept {
-        T_x.setZero();
-        T_y.setZero();
+        // T_x.setZero();
+        // T_y.setZero();
+        T.setZero();
     }
     inline RadiancePacket(RadiancePacket&& o) noexcept = default;
     inline RadiancePacket(const RadiancePacket& o) noexcept = default;
@@ -46,17 +48,17 @@ struct RadiancePacket {
     inline RadiancePacket& operator=(const RadiancePacket& o) noexcept = default;
 
     inline void rotateShapeMatrices(Float costheta2, Float sintheta2) noexcept {
-        auto x = costheta2*T_x + sintheta2*T_y;
-        T_y = sintheta2*T_x + costheta2*T_y;
-        T_x = x;
+        // auto x = costheta2*T_x + sintheta2*T_y;
+        // T_y = sintheta2*T_x + costheta2*T_y;
+        // T_x = x;
     }
     inline void deformShapeMatrices(const Matrix2x2 &Ux, const Matrix2x2 &Uy) noexcept {
-        Matrix2x2 Uxt, Uyt;
-        Ux.transpose(Uxt);
-        Uy.transpose(Uyt);
+        // Matrix2x2 Uxt, Uyt;
+        // Ux.transpose(Uxt);
+        // Uy.transpose(Uyt);
 
-        T_x = Ux*T_x*Uxt;
-        T_y = Uy*T_y*Uyt;
+        // T_x = Ux*T_x*Uxt;
+        // T_y = Uy*T_y*Uyt;
     }
 
     inline void rotateFrame(const Frame &toFrame) noexcept {
@@ -86,38 +88,50 @@ struct RadiancePacket {
     const auto Sy(std::size_t s) const noexcept     { return Ly(s) * Vector4{ 1,-1,0,0 }; }
     const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
     
-    const auto Thetax(Float k, Float sigma_zz) const noexcept {
-        const auto T = sqr(r/k) * T_x;
-        return Matrix3x3(T.m[0][0], T.m[0][1], 0,
-                         T.m[0][1], T.m[1][1], 0,
-                         0,         0,         sigma_zz);
-    } 
-    const auto Thetay(Float k, Float sigma_zz) const noexcept {
-        const auto T = sqr(r/k) * T_y;
-        return Matrix3x3(T.m[0][0], T.m[0][1], 0,
-                         T.m[0][1], T.m[1][1], 0,
-                         0,         0,         sigma_zz);
-    }
-    const auto Thetac(Float k, Float sigma_zz) const noexcept {
-        return Float(.5) * (Thetax(k,sigma_zz) + Thetay(k,sigma_zz));
-    }
+    // In microns^2
+    // const auto coherenceArea_x(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_x.det()); }
+    // const auto coherenceArea_y(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_y.det()); }
+    const auto coherenceArea(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T.det()); }
     
-    const auto invThetax(Float k, Float sigma_zz) const noexcept {
-        const auto T = sqr(r/k) * T_x;
-        return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
-            Matrix3x3( T.m[1][1], -T.m[0][1], 0,
-                      -T.m[0][1],  T.m[0][0], 0,
-                       0,          0,         Float(1) / sigma_zz);
-    } 
-    const auto invThetay(Float k, Float sigma_zz) const noexcept {
-        const auto T = sqr(r/k) * T_y;
-        return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
-            Matrix3x3( T.m[1][1], -T.m[0][1], 0,
-                      -T.m[0][1],  T.m[0][0], 0,
-                       0,          0,         Float(1) / sigma_zz);
-    } 
-    const auto invThetac(Float k, Float sigma_zz) const noexcept {
-        const auto T = sqr(r/k) * Float(.5) * (T_x+T_y);
+    // const auto Thetax(Float k, Float sigma_zz) const noexcept {
+    //     const auto T = sqr(r/k) * T_x;
+    //     return Matrix3x3(T.m[0][0], T.m[0][1], 0,
+    //                      T.m[0][1], T.m[1][1], 0,
+    //                      0,         0,         sigma_zz);
+    // } 
+    // const auto Thetay(Float k, Float sigma_zz) const noexcept {
+    //     const auto T = sqr(r/k) * T_y;
+    //     return Matrix3x3(T.m[0][0], T.m[0][1], 0,
+    //                      T.m[0][1], T.m[1][1], 0,
+    //                      0,         0,         sigma_zz);
+    // }
+    // const auto Thetac(Float k, Float sigma_zz) const noexcept {
+    //     return Float(.5) * (Thetax(k,sigma_zz) + Thetay(k,sigma_zz));
+    // }
+    
+    // const auto invThetax(Float k, Float sigma_zz) const noexcept {
+    //     const auto T = sqr(r/k) * T_x;
+    //     return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+    //         Matrix3x3( T.m[1][1], -T.m[0][1], 0,
+    //                   -T.m[0][1],  T.m[0][0], 0,
+    //                    0,          0,         Float(1) / sigma_zz);
+    // } 
+    // const auto invThetay(Float k, Float sigma_zz) const noexcept {
+    //     const auto T = sqr(r/k) * T_y;
+    //     return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+    //         Matrix3x3( T.m[1][1], -T.m[0][1], 0,
+    //                   -T.m[0][1],  T.m[0][0], 0,
+    //                    0,          0,         Float(1) / sigma_zz);
+    // } 
+    // const auto invThetac(Float k, Float sigma_zz) const noexcept {
+    //     const auto T = sqr(r/k) * Float(.5) * (T_x+T_y);
+    //     return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+    //         Matrix3x3( T.m[1][1], -T.m[0][1], 0,
+    //                   -T.m[0][1],  T.m[0][0], 0,
+    //                    0,          0,         Float(1) / sigma_zz);
+    // } 
+    const auto invTheta(Float k, Float sigma_zz) const noexcept {
+        const auto T = sqr(r/k) * this->T;
         return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
             Matrix3x3( T.m[1][1], -T.m[0][1], 0,
                       -T.m[0][1],  T.m[0][0], 0,
@@ -153,16 +167,18 @@ struct RadiancePacket {
     const auto& operator[](std::size_t idx) const noexcept { return ls[idx]; }
     auto& operator[](std::size_t idx) noexcept { return ls[idx]; }
     
-    bool isValid() const noexcept { return T_x.m[0][0]>0 && T_x.m[1][1]>0 &&
-                                           T_y.m[0][0]>0 && T_y.m[1][1]>0; }
+    bool isValid() const noexcept { return T.m[0][0]>0 && T.m[1][1]>0; }
+    // bool isValid() const noexcept { return T_x.m[0][0]>0 && T_x.m[1][1]>0 &&
+    //                                        T_y.m[0][0]>0 && T_y.m[1][1]>0; }
 };
 
 inline auto sourceLight(Spectrum emission, const PLTContext &ctx) {
     RadiancePacket rad{};
     for (auto i=0;i<SPECTRUM_SAMPLES;++i) 
         rad.ls[i] = Vector4{ emission[i],0,0,0 };
-    const auto c = 2*M_PI*ctx.Omega/ctx.A;
-    rad.T_x = rad.T_y = Matrix2x2(c,0,0,c);
+    const auto c = ctx.Omega/ctx.A;
+    // rad.T_x = rad.T_y = Matrix2x2(c,0,0,c);
+    rad.T = Matrix2x2(c,0,0,c);
     rad.r = 0;
     
     return rad;

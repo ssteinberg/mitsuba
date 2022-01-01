@@ -481,10 +481,27 @@ struct MTS_EXPORT_BIDIR PathVertex {
         const PathVertex *succ, const PLTContext &pltCtx, ETransportMode mode, 
         EMeasure measure = EArea) const;
     
-    Spectrum eval(const Scene *scene, const PathVertex *pred,
+    std::pair<Spectrum,Spectrum> eval(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
         RadiancePacket *radiancePacket, const PLTContext &pltCtx,
         EMeasure measure = EArea) const;
+
+    /**
+     * \brief Given the specified predecessor and successor, update
+     * the cached values stored in this vertex
+     *
+     * \param pred
+     *     Pointer to the predecessor vertex (if any) and \c NULL otherwise
+     * \param succ
+     *     Pointer to the successor vertex (if any) and \c NULL otherwise
+     * \param mode
+     *     Specifies the direction of light transport
+     * \return \c false when there is no throughput
+     */
+    bool updateEnvelope(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, Spectrum *evalResult = nullptr, 
+        EMeasure measure = EArea);
 
     bool update(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
@@ -831,22 +848,6 @@ struct MTS_EXPORT_BIDIR PathVertex {
      */
     bool verify(const Scene *scene, const PathVertex *adjL,
         const PathVertex *adjE, ETransportMode mode, std::ostream &os) const;
-
-    /**
-     * \brief Given the specified predecessor and successor, update
-     * the cached values stored in this vertex
-     *
-     * \param pred
-     *     Pointer to the predecessor vertex (if any) and \c NULL otherwise
-     * \param succ
-     *     Pointer to the successor vertex (if any) and \c NULL otherwise
-     * \param mode
-     *     Specifies the direction of light transport
-     * \return \c false when there is no throughput
-     */
-    bool updateEnvelope(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, const PLTContext &pltCtx, 
-        ETransportMode mode, EMeasure measure = EArea);
 
     /**
      * \brief Create a connection between two disconnected subpaths

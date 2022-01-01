@@ -125,7 +125,7 @@ public:
             || Frame::cosTheta(bRec.wo) <= 0) 
             return Spectrum(.0f);
 
-        Assert(bRec.mode==ERadiance && radiancePacket.isValid());
+        Assert(bRec.mode==EImportance && radiancePacket.isValid());
         Assert(!!bRec.pltCtx);
 
         const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;

@@ -16,11 +16,12 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <mitsuba/core/warp.h>
 #include "mitsuba/core/constants.h"
+#include "mitsuba/core/fwd.h"
 #include "mitsuba/core/math.h"
 #include "mitsuba/render/sampler.h"
 #include <cmath>
-#include <mitsuba/core/warp.h>
 
 MTS_NAMESPACE_BEGIN
 
@@ -127,7 +128,7 @@ Point2 uniformDiskToSquareConcentric(const Point2 &p) {
 }
 
 Point2 squareToStdNormal(const Point2 &sample) {
-    Float r   = std::sqrt(-2 * math::fastlog(1-sample.x)),
+    Float r   = std::sqrt(-2 * std::log(1-sample.x)),
           phi = 2 * M_PI * sample.y;
     Point2 result;
     math::sincos(phi, &result.y, &result.x);
@@ -135,41 +136,39 @@ Point2 squareToStdNormal(const Point2 &sample) {
 }
 
 Float squareToStdNormalPdf(const Point2 &pos) {
-    return INV_TWOPI * math::fastexp(-(pos.x*pos.x + pos.y*pos.y)/2.0f);
+    return INV_TWOPI * std::exp(-(pos.x*pos.x + pos.y*pos.y)/2.0f);
 }
 
-Vector squareToClampedGaussian(Float stddev, Point2 mean, Sampler &sampler) {
+Vector squareToTruncatedGaussian(Float stddev, const Point2 &mean, Sampler &sampler) {
     constexpr auto attempts = 666ull;
     for (auto i=0ull; i<attempts; ++i) {
-        const auto& p = squareToStdNormal(sampler.next2D()) * stddev + mean;
+        const auto& p = squareToStdNormal(sampler.next2D())*stddev + mean;
         const auto l = sqr(p.x)+sqr(p.y);
         if (l<=1) {
-            auto z = math::safe_sqrt(1-l);
-            if (EXPECT_NOT_TAKEN(z == 0))
+            auto z = std::sqrt(1-l);
+            if (EXPECT_NOT_TAKEN(z < 1e-10f))
                 z = 1e-10f;
             return Vector{ p.x,p.y,z };
         }
     }
 
     assert(false);  // Rejection sampling failed
-    return diskToCosineHemisphere(mean);
+    return Vector{0,0,0};
 }
 
-Float squareToClampedGaussianPdf(Float stddev, Point2 mean, const Point2 &pos) {
-    const auto p = (pos-mean) / stddev;
+template <typename T>
+auto normalCDF(T x) noexcept { return 1/T(2) * (T(1) + std::erf(INV_SQRT_TWO * x)); }
+Float squareToTruncatedGaussianPdf(Float stddev, const Point2 &mean, const Vector3 &pos) {
+    const auto& p = Point2{ pos.x-mean.x,pos.y-mean.y } / stddev;
 
-    const auto pdfxmin = std::erf((-Float(1)-mean.x) / stddev);
-    const auto pdfxmax = std::erf(( Float(1)-mean.x) / stddev);
-    const auto ymax = math::safe_sqrt(1-sqr(pos.x-mean.x));
-    const auto pdfymin = std::erf((-ymax-mean.y) / stddev);
-    const auto pdfymax = std::erf(( ymax-mean.y) / stddev);
+    const auto ymax = math::safe_sqrt(1-sqr(pos.x));
+    const auto cdfxmin = normalCDF((-1    - mean.x) / stddev);
+    const auto cdfxmax = normalCDF(( 1    - mean.x) / stddev);
+    const auto cdfymin = normalCDF((-ymax - mean.y) / stddev);
+    const auto cdfymax = normalCDF(( ymax - mean.y) / stddev);
 
-    const auto r = (pdfxmax-pdfxmin) * (pdfymax-pdfymin) / 4;
-    const Float pdf = r>RCPOVERFLOW ?
-        squareToStdNormalPdf({ p.x,p.y }) / r :
-        1;
-        
-    return pdf;
+    const auto r = (cdfxmax-cdfxmin) * (cdfymax-cdfymin) * sqr(stddev);
+    return r>RCPOVERFLOW ? std::exp(-(sqr(p.x) + sqr(p.y))/2) * INV_TWOPI / r : .0f;
 }
 
 static Float intervalToTent(Float sample) {

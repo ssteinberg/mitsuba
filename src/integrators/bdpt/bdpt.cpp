@@ -243,5 +243,5 @@ private:
 };
 
 MTS_IMPLEMENT_CLASS_S(BDPTIntegrator, false, Integrator)
-MTS_EXPORT_PLUGIN(BDPTIntegrator, "Bidirectional path tracer");
+MTS_EXPORT_PLUGIN(BDPTIntegrator, "PLT bidirectional path tracer");
 MTS_NAMESPACE_END

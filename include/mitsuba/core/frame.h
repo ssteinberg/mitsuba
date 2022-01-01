@@ -54,12 +54,12 @@ struct Frame {
     /// Construct a new sp-coordinate frame
     inline static Frame spframe(const Vector &wo, const Normal &n) {
         Frame f;
-        f.n = n;
+        f.n = wo;
 
         const auto &c = cross(wo,n);
         const auto lc = c.lengthSquared();
         if (lc<1e-10) {
-            coordinateSystem(n, f.s, f.t);
+            coordinateSystem(wo, f.s, f.t);
         }
         else {
             f.s = c/std::sqrt(lc);

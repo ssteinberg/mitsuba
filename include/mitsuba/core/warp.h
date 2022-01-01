@@ -120,8 +120,8 @@ namespace warp {
     extern MTS_EXPORT_CORE Float squareToStdNormalPdf(const Point2 &pos);
 
     /// Gaussians clamped to unit disk
-    extern MTS_EXPORT_CORE Vector squareToClampedGaussian(Float stddev, Point2 mean, Sampler &sampler);
-    extern MTS_EXPORT_CORE Float squareToClampedGaussianPdf(Float stddev, Point2 mean, const Point2 &pos);
+    extern MTS_EXPORT_CORE Vector squareToTruncatedGaussian(Float stddev, const Point2& mean, Sampler &sampler);
+    extern MTS_EXPORT_CORE Float squareToTruncatedGaussianPdf(Float stddev, const Point2& mean, const Vector3 &pos);
 
     /// Warp a uniformly distributed square sample to a 2D tent distribution
     extern MTS_EXPORT_CORE Point2 squareToTent(const Point2 &sample);

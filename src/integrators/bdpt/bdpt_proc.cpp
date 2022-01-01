@@ -155,7 +155,8 @@ public:
                     *vsPred = emitterSubpath.vertexOrNull(s-1),
                     *vsNext = emitterSubpath.vertexOrNull(s+1);
                 
-                if (!vs->update(scene, vsPred, vsNext, &rp, m_config.pltCtx, EImportance, nullptr, vs->measure)) {
+                if (!vs->update(scene, vsPred, vsNext, 
+                                &rp, m_config.pltCtx, EImportance, nullptr, vs->measure)) {
                     maxS = s;
                     break;
                 }
@@ -252,7 +253,8 @@ public:
                         *vttPred = sensorSubpath.vertexOrNull(tt+1),
                         *vttNext = sensorSubpath.vertexOrNull(tt-1);
                 
-                    vtt->update(scene, vttPred, vttNext, &rp, m_config.pltCtx, ERadiance, nullptr, vtt->measure);
+                    vtt->update(scene, vttPred, vttNext, 
+                                &rp, m_config.pltCtx, ERadiance, nullptr, vtt->measure);
                     
                     value *=
                         vtt->weight[ERadiance] *
