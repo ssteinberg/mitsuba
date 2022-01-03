@@ -182,6 +182,7 @@ public:
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
         const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
         const auto m = normalize(bRec.wo+bRec.wi);
+        const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
         
         if (!hasDirect && a.average()==1)
             return Spectrum(.0f);
@@ -197,34 +198,29 @@ public:
         // Rotate to sp-frame first
         radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
         
-        const auto k = Spectrum::ks().average();
-        const auto h = k*(bRec.wo + bRec.wi);
-        const auto D = !hasDirect ? 
-                       gaussianSurface::diffract(radiancePacket.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                                sigma2, Q,Qt, h) : .0f;
-        // const auto Dx = diffract(radiancePacket.invThetax(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-        //                          sigma2, Q,Qt, h);
-        // const auto Dy = diffract(radiancePacket.invThetay(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-        //                          sigma2, Q,Qt, h);
-        // const auto Dc = diffract(radiancePacket.invThetac(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-        //                          sigma2, Q,Qt, h);
-        
         const auto& in = radiancePacket.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
-            if (hasDirect) {
-                // Mueller Fresnel pBSDF
-                const auto M = MuellerFresnelRConductor(Frame::cosTheta(bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
-                radiancePacket.L(idx) = a[idx] * m00[idx] * ((Matrix4x4)M * radiancePacket.S(idx));
-            }
-            else {
-                const auto M = MuellerFresnelRConductor(dot(m,bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
-                radiancePacket.L(idx) = (1-a[idx]) * m00[idx] * ((Matrix4x4)M *
-                                D*radiancePacket.S(idx));
+            // Mueller Fresnel pBSDF
+            const auto lambda = Spectrum::lambdas()[idx] * rcp_max_lambda;
+            const auto M = hasDirect ? 
+                           MuellerFresnelRConductor(Frame::cosTheta(bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx])) :
+                           MuellerFresnelRConductor(dot(m,bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
+
+            // Diffraction
+            auto D = 1.f;
+            if (!hasDirect) {
+                const auto k = Spectrum::ks()[idx];
+                const auto h = k*(bRec.wo + bRec.wi);
+                const auto invSigma = radiancePacket.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f);
+                D = sqr(1/lambda) * gaussianSurface::diffract(invSigma, sigma2, Q,Qt, h);
             }
 
+            auto L = m00[idx] * ((Matrix4x4)M * D*radiancePacket.S(idx));
+            L *= hasDirect ? a[idx] : (1-a[idx]);
             if (in[idx]>RCPOVERFLOW)
-                result[idx] = radiancePacket.L(idx)[0] / in[idx];
+                result[idx] = L[0] / in[idx];
+            radiancePacket.L(idx) = L;
         }
 
         return result;
