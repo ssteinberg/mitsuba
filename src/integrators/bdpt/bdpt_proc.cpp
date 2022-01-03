@@ -21,6 +21,7 @@
 #include <mitsuba/bidir/util.h>
 #include <mitsuba/plt/plt.h>
 #include "bdpt_proc.h"
+#include "mitsuba/bidir/common.h"
 
 MTS_NAMESPACE_BEGIN
 

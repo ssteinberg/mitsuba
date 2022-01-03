@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "mitsuba/core/constants.h"
 #include <mitsuba/core/platform.h>
 #include <mitsuba/plt/plt.h>
 #include <mitsuba/core/warp.h>
@@ -63,7 +64,7 @@ inline auto diffract(const Matrix3x3& invSigma, Float sigma2, const Matrix3x3 &Q
         return Float(0);
 
     const auto& h2 = Vector2{ h.x,h.y };
-    return sqr(2 * M_PI) / std::sqrt(S.det()) * 
+    return 2*sqr(M_PI) / std::sqrt(S.det()) * 
             std::exp(-dot(h2,invS*h2)/2);
 }
 

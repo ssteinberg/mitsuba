@@ -1,5 +1,240 @@
 [
   {
+    "command": "g++ -o build/debug/mtsgui/aboutdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/aboutdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/aboutdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/acknowledgmentdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/acknowledgmentdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/acknowledgmentdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/addserverdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/addserverdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/addserverdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/glwidget.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/glwidget.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/glwidget.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/importdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/importdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/importdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/loaddlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/loaddlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/loaddlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/locateresourcedlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/locateresourcedlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/locateresourcedlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/logwidget.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/logwidget.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/logwidget.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/main.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/main.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/main.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/mainwindow.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/mainwindow.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/mainwindow.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_aboutdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_aboutdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_aboutdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_acknowledgmentdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_acknowledgmentdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_acknowledgmentdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_addserverdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_addserverdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_addserverdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_glwidget.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_glwidget.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_glwidget.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_importdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_importdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_importdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_loaddlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_loaddlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_loaddlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_locateresourcedlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_locateresourcedlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_locateresourcedlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_logwidget.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_logwidget.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_logwidget.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_mainwindow.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_mainwindow.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_mainwindow.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_preview.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_preview.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_preview.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_previewsettingsdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_previewsettingsdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_previewsettingsdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_programsettingsdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_programsettingsdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_programsettingsdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_rendersettingsdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_rendersettingsdlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_rendersettingsdlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_sceneimporter.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_sceneimporter.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_sceneimporter.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_sceneinfodlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_sceneinfodlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_sceneinfodlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_server.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_server.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_server.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_tabbar.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_tabbar.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_tabbar.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_updatedlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_updatedlg.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_updatedlg.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_upgrade.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_upgrade.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_upgrade.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/moc_xmltreemodel.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/moc_xmltreemodel.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/moc_xmltreemodel.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/preview.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/preview.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/preview.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/previewsettingsdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/previewsettingsdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/previewsettingsdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/programsettingsdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/programsettingsdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/programsettingsdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/qrc_resources.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/qrc_resources.cc",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/qrc_resources.cc"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/rendersettingsdlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/rendersettingsdlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/rendersettingsdlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/save.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/save.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/save.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/sceneimporter.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/sceneimporter.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/sceneimporter.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/sceneinfodlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/sceneinfodlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/sceneinfodlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/sceneloader.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/sceneloader.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/sceneloader.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/server.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/server.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/server.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/simdtonemap.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/simdtonemap.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/simdtonemap.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/symlinks_auth.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/symlinks_auth.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/symlinks_auth.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/tabbar.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/tabbar.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/tabbar.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/test_simdtonemap.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/test_simdtonemap.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/test_simdtonemap.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/updatedlg.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/updatedlg.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/updatedlg.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/upgrade.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/upgrade.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/upgrade.cpp"
+  },
+  {
+    "command": "g++ -o build/debug/mtsgui/xmltreemodel.o -c -DGLEW_MX -O0 -Wall -g -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/debug/mtsgui/xmltreemodel.cpp",
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "build/debug/mtsgui/xmltreemodel.cpp"
+  },
+  {
     "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
     "file": "build/release/mtsgui/aboutdlg.cpp",
     "command": "g++ -o build/release/mtsgui/aboutdlg.o -c -DGLEW_MX -O3 -Wall -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -DQT_GUI_LIB -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_OPENGL_LIB -DQT_XML_LIB -DQT_NETWORK_LIB -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 -Isrc/mtsgui build/release/mtsgui/aboutdlg.cpp"
@@ -243,6 +478,11 @@
     "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
     "file": "src/bsdfs/roughconductor.cpp",
     "command": "g++ -o build/release/bsdfs/roughconductor.os -c -O3 -Wall -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 src/bsdfs/roughconductor.cpp"
+  },
+  {
+    "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",
+    "file": "src/bsdfs/roughdielectric.cpp",
+    "command": "g++ -o build/release/bsdfs/roughdielectric.os -c -O3 -Wall -pipe -march=native -msse2 -ftree-vectorize -mfpmath=sse -funsafe-math-optimizations -fno-rounding-math -fno-signaling-nans -fno-math-errno -fomit-frame-pointer -DMTS_DEBUG -DSINGLE_PRECISION -DSPECTRUM_SAMPLES=16 -DMTS_SSE -DMTS_HAS_COHERENT_RT -fopenmp -fvisibility=hidden -mtls-dialect=gnu2 -fPIC -fPIC -DMTS_HAS_LIBPNG=1 -DMTS_HAS_LIBJPEG=1 -DMTS_HAS_OPENEXR=1 -DMTS_HAS_FFTW=1 -I/usr/include/eigen3 -I/usr/include/OpenEXR -Iinclude -I/usr/include/x86_64-linux-gnu/qt5 src/bsdfs/roughdielectric.cpp"
   },
   {
     "directory": "/home/shlomi/src/202109_pltpm/code/mitsuba",

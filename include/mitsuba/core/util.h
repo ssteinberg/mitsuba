@@ -411,7 +411,7 @@ extern MTS_EXPORT_CORE Point2 toSphericalCoordinates(const Vector &v);
 // -----------------------------------------------------------------------
 
 extern MTS_EXPORT_CORE void fresnel_dielectric(Float cosThetaI_, Float eta, 
-        Float &cosThetaT_, Float &rs, Float &rp, Float &ts, Float &tp);
+        Float &rs, Float &rp, Float &ts, Float &tp);
 extern MTS_EXPORT_CORE void fresnel_conductor(Float cosThetaI, const std::complex<Float>& eta, 
         std::complex<Float>& rs, std::complex<Float>& rp);
     

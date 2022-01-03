@@ -107,7 +107,7 @@ public:
         return m_reflectance->eval(its);
     }
 
-    Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure) const {
+    Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
@@ -119,7 +119,8 @@ public:
         return costheta_o * m00;
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, RadiancePacket &radiancePacket, EMeasure measure) const {
+    Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
+                  RadiancePacket &radiancePacket, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0) 

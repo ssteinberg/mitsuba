@@ -387,10 +387,20 @@ public:
      *     different measures. (E.g. a diffuse material with an
      *     ideally smooth dielectric coating).
      */
-    virtual Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure = ESolidAngle) const = 0;
+    virtual Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta,
+            EMeasure measure = ESolidAngle) const = 0;
+    inline Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure = ESolidAngle) const {
+        Float unused;
+        return envelope(bRec, unused, measure);
+    }
     
-    virtual Spectrum eval(const BSDFSamplingRecord &bRec,
-        RadiancePacket &radiancePacket, EMeasure measure = ESolidAngle) const = 0;
+    virtual Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
+            RadiancePacket &radiancePacket, EMeasure measure = ESolidAngle) const = 0;
+    inline Spectrum eval(const BSDFSamplingRecord &bRec, 
+            RadiancePacket &radiancePacket, EMeasure measure = ESolidAngle) const {
+        Float unused;
+        return eval(bRec, unused, radiancePacket, measure);
+    }
 
     /**
      * \brief For transmissive BSDFs: return the material's

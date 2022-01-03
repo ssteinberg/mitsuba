@@ -32,6 +32,7 @@
 
 #include "microfacet.h"
 #include "ior.h"
+#include "mitsuba/core/constants.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -121,11 +122,10 @@ public:
     }
 
     inline Vector reflect(const Vector &wi) const {
-        const auto m = Vector3{ 0,0,1 };
-        return 2*dot(wi,m)*m - wi;
+        return Vector(-wi.x, -wi.y, wi.z);
     }
     
-    Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure) const {
+    Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0)
                 && measure == EDiscrete;
@@ -142,22 +142,27 @@ public:
         const auto m00 = m_specularReflectance->eval(bRec.its);
         const auto q = m_q->eval(bRec.its).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto costheta_o = Frame::cosTheta(bRec.wo);
         const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        
+        if (!hasDirect && a.average()==1)
+            return Spectrum(.0f);
         
         if (hasDirect) {
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return a * m00 *
                     fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
-            return Spectrum(.0f);
         }
-        const auto m = normalize(bRec.wo+bRec.wi);
-        return costheta_o * (Spectrum(1.f)-a) * m00 * 
-                gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, bRec.wo + bRec.wi) *
-                fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
+        if (hasScattered) {
+            const auto m = normalize(bRec.wo+bRec.wi);
+            return (Spectrum(1.f)-a) * m00 * 
+                    gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, bRec.wo + bRec.wi) *
+                    fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
+        }
+        return Spectrum(.0f);
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, RadiancePacket &radiancePacket, EMeasure measure) const { 
+    Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
+                  RadiancePacket &radiancePacket, EMeasure measure) const { 
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0)
                 && measure == EDiscrete;
@@ -175,9 +180,13 @@ public:
         const auto m00 = m_specularReflectance->eval(bRec.its);
         const auto q = m_q->eval(bRec.its).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto costheta_o = Frame::cosTheta(bRec.wo);
         const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
         const auto m = normalize(bRec.wo+bRec.wi);
+        
+        if (!hasDirect && a.average()==1)
+            return Spectrum(.0f);
+        if (hasDirect && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
+            return Spectrum(.0f);
         
         const auto fi = radiancePacket.f;
         Matrix3x3 Q = Matrix3x3(bRec.its.toLocal(fi.s),
@@ -186,36 +195,32 @@ public:
         Q.transpose(Qt);
         
         // Rotate to sp-frame first
-        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
+        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+        
+        const auto k = Spectrum::ks().average();
+        const auto h = k*(bRec.wo + bRec.wi);
+        const auto D = !hasDirect ? 
+                       gaussianSurface::diffract(radiancePacket.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+                                sigma2, Q,Qt, h) : .0f;
+        // const auto Dx = diffract(radiancePacket.invThetax(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+        //                          sigma2, Q,Qt, h);
+        // const auto Dy = diffract(radiancePacket.invThetay(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+        //                          sigma2, Q,Qt, h);
+        // const auto Dc = diffract(radiancePacket.invThetac(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+        //                          sigma2, Q,Qt, h);
         
         const auto& in = radiancePacket.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
             if (hasDirect) {
-                if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
-                    return Spectrum(.0f);
-                
                 // Mueller Fresnel pBSDF
                 const auto M = MuellerFresnelRConductor(Frame::cosTheta(bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
                 radiancePacket.L(idx) = a[idx] * m00[idx] * ((Matrix4x4)M * radiancePacket.S(idx));
             }
             else {
-                const auto k = Spectrum::ks()[idx];
-                const auto h = k*(bRec.wo + bRec.wi);
-                const auto D = gaussianSurface::diffract(radiancePacket.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                                        sigma2, Q,Qt, h);
-                // const auto Dx = diffract(radiancePacket.invThetax(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                //                          sigma2, Q,Qt, h);
-                // const auto Dy = diffract(radiancePacket.invThetay(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                //                          sigma2, Q,Qt, h);
-                // const auto Dc = diffract(radiancePacket.invThetac(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                //                          sigma2, Q,Qt, h);
-                //                          
                 const auto M = MuellerFresnelRConductor(dot(m,bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
-                
-                radiancePacket.L(idx) = costheta_o * (1-a[idx]) * m00[idx] * ((Matrix4x4)M *
+                radiancePacket.L(idx) = (1-a[idx]) * m00[idx] * ((Matrix4x4)M *
                                 D*radiancePacket.S(idx));
-                //                (Dx*radiancePacket.Sx(idx) + Dy*radiancePacket.Sy(idx) + Dc*radiancePacket.Sc(idx)));
             }
 
             if (in[idx]>RCPOVERFLOW)
@@ -232,7 +237,7 @@ public:
                 && (bRec.component == -1 || bRec.component == 1);
 
         if (Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
-            return 0.0f;
+            return .0f;
 
         Assert(!!bRec.pltCtx);
 
@@ -281,15 +286,19 @@ public:
                 bRec.sampledType = EDirectReflection;
                 bRec.wo = reflect(bRec.wi);
 
-                return Float(1)/probDirect * a * m00 *
+                return 1.f/probDirect * a * m00 *
                     fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
             } else {
                 bRec.sampledComponent = 1;
                 bRec.sampledType = EScatteredReflection;
                 bRec.wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
 
+                const auto pdf = (1-probDirect) * gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+                if (pdf <= RCPOVERFLOW)
+                    return Spectrum(.0f);
+
                 const auto m = normalize(bRec.wo+bRec.wi);
-                return Float(1)/(1-probDirect) * (Spectrum(1.f)-a) * m00 *
+                return (1.f/pdf) * (Spectrum(1.f)-a) * m00 *
                     fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
             }
         } else if (hasDirect) {
@@ -303,8 +312,12 @@ public:
             bRec.sampledType = EScatteredReflection;
             bRec.wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
 
+            const auto pdf = gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+            if (pdf <= RCPOVERFLOW)
+                return Spectrum(.0f);
+
             const auto m = normalize(bRec.wo+bRec.wi);
-            return (Spectrum(1.f)-a) * m00 *
+            return (1.f/pdf) * (Spectrum(1.f)-a) * m00 *
                 fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
     }

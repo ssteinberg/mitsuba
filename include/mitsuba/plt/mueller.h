@@ -65,16 +65,21 @@ inline Matrix4x4 MuellerFresnelRConductor(Float cosThetaI, const std::complex<Fl
     return MuellerFresnel(rs, rp);
 }
 inline Matrix4x4 MuellerFresnelRDielectric(Float cosThetaI, Float eta) noexcept {
-    Float cosThetaT, rs,rp, ts,tp;
-    fresnel_dielectric(cosThetaI, eta, cosThetaT, rs, rp, ts, tp);
+    Float rs,rp, ts,tp;
+    fresnel_dielectric(cosThetaI, eta, rs, rp, ts, tp);
 
     return MuellerFresnel(rs, rp);
 }
-inline Matrix4x4 MuellerFresnelTDielectric(Float cosThetaI, Float &cosThetaT, Float eta) noexcept {
+inline Matrix4x4 MuellerFresnelTDielectric(Float cosThetaI, Float eta) noexcept {
     Float rs,rp, ts,tp;
-    fresnel_dielectric(cosThetaI, eta, cosThetaT, rs, rp, ts, tp);
+    fresnel_dielectric(cosThetaI, eta, rs, rp, ts, tp);
 
     return MuellerFresnel(ts, tp);
+}
+inline Matrix4x4 MuellerFresnelDielectric(Float cosThetaI, Float eta, bool reflection) noexcept {
+    return reflection ?
+        MuellerFresnelRDielectric(cosThetaI, eta) :
+        MuellerFresnelTDielectric(cosThetaI, eta);
 }
 
 MTS_NAMESPACE_END

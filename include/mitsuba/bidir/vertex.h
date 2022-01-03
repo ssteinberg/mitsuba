@@ -500,14 +500,14 @@ struct MTS_EXPORT_BIDIR PathVertex {
      */
     bool updateEnvelope(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, const PLTContext &pltCtx, 
-        ETransportMode mode, Spectrum *evalResult = nullptr, 
+        ETransportMode mode, Spectrum *throughput = nullptr, 
         EMeasure measure = EArea);
 
     bool update(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
         RadiancePacket *radiancePacket, const PLTContext &pltCtx,
         ETransportMode noninteraction_mode,
-        Spectrum *evalResult = nullptr, EMeasure measure = EArea);
+        Spectrum *throughput = nullptr, EMeasure measure = EArea);
 
     /**
      * \brief Compute the density of a successor node

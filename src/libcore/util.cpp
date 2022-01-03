@@ -648,9 +648,8 @@ Float fresnelDielectric(Float cosThetaI, Float cosThetaT, Float eta) {
     return 0.5f * (Rs * Rs + Rp * Rp);
 }
 
-void fresnel_dielectric(Float cosThetaI_, Float eta, Float &cosThetaT_, Float &rs, Float &rp, Float &ts, Float &tp) {
+void fresnel_dielectric(Float cosThetaI_, Float eta, Float &rs, Float &rp, Float &ts, Float &tp) {
     if (EXPECT_NOT_TAKEN(eta == 1)) {
-        cosThetaT_ = -cosThetaI_;
         rs = rp = 0;
         ts = tp = 1;
         return;
@@ -658,12 +657,8 @@ void fresnel_dielectric(Float cosThetaI_, Float eta, Float &cosThetaT_, Float &r
 
     /* Using Snell's law, calculate the squared sine of the
        angle between the normal and the transmitted ray */
-    Float scale = (cosThetaI_ > 0) ? 1/eta : eta,
-          cosThetaTSqr = 1 - (1-cosThetaI_*cosThetaI_) * (scale*scale);
-
-    /* Check for total internal reflection */
-    if (cosThetaTSqr <= 0.0f)
-        cosThetaT_ = 0.0f;
+    eta = (cosThetaI_ > 0) ? 1/eta : eta;
+    Float cosThetaTSqr = 1 - (1-cosThetaI_*cosThetaI_) * sqr(eta);
 
     /* Find the absolute cosines of the incident/transmitted rays */
     Float cosThetaI = std::abs(cosThetaI_);
@@ -671,10 +666,9 @@ void fresnel_dielectric(Float cosThetaI_, Float eta, Float &cosThetaT_, Float &r
 
     rs = (cosThetaI - eta * cosThetaT) / (cosThetaI + eta * cosThetaT);
     rp = (eta * cosThetaI - cosThetaT) / (eta * cosThetaI + cosThetaT);
-    ts = 2 * cosThetaI / (cosThetaI + eta * cosThetaT);
-    tp = 2 * cosThetaI / (eta * cosThetaI + cosThetaT);
-
-    cosThetaT_ = (cosThetaI_ > 0) ? -cosThetaT : cosThetaT;
+    const auto imp = std::sqrt(eta*cosThetaT/cosThetaI);
+    ts = 2 * imp * cosThetaI / (cosThetaI + eta * cosThetaT);
+    tp = 2 * imp * cosThetaI / (eta * cosThetaI + cosThetaT);
 }
 
 void fresnel_conductor(Float cosThetaI, const std::complex<Float>& eta, 

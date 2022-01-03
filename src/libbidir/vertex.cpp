@@ -762,7 +762,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
 
 bool PathVertex::updateEnvelope(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, const PLTContext &pltCtx, 
-        ETransportMode mode, Spectrum *evalResult, 
+        ETransportMode mode, Spectrum *throughput, 
         EMeasure measure) {
 
     pdf[mode]       = evalPdf(scene, pred, succ, pltCtx, mode, measure);
@@ -770,8 +770,8 @@ bool PathVertex::updateEnvelope(const Scene *scene, const PathVertex *pred,
     weight[mode]    = envelope(scene, pred, succ, pltCtx, mode, measure);
     weight[1-mode]  = envelope(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
 
-    if (evalResult)
-        *evalResult *= weight[mode];
+    if (throughput)
+        *throughput *= weight[mode];
     if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
         return false;
 
@@ -897,7 +897,8 @@ Spectrum PathVertex::envelope(const Scene *scene, const PathVertex *pred,
                 if (measure == EArea)
                     measure = ESolidAngle;
 
-                result = bsdf->envelope(bRec, measure);
+                auto eta = 1.f;
+                result = bsdf->envelope(bRec, eta, measure);
 
                 /* Prevent light leaks due to the use of shading normals */
                 Float wiDotGeoN = dot(its.geoFrame.n, wi),
@@ -912,6 +913,9 @@ Spectrum PathVertex::envelope(const Scene *scene, const PathVertex *pred,
                     result *= std::abs(
                         (Frame::cosTheta(bRec.wi) * woDotGeoN) /
                         (Frame::cosTheta(bRec.wo) * wiDotGeoN));
+                }
+                else if (bRec.eta != 1) {
+                    result /= sqr(eta);
                 }
 
                 if (measure != EDiscrete && Frame::cosTheta(bRec.wo) != 0)
@@ -951,15 +955,15 @@ bool PathVertex::update(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
         RadiancePacket *radiancePacket, const PLTContext &pltCtx,
         ETransportMode noninteraction_mode,
-        Spectrum *evalResult, EMeasure measure) {
+        Spectrum *throughput, EMeasure measure) {
     // Update radiance packet
     const auto result = eval(scene, pred, succ, radiancePacket, pltCtx, measure);
 
     if (!isSurfaceInteraction() && !isMediumInteraction()) {
         if (noninteraction_mode==EImportance) 
-            return updateEnvelope(scene, pred, succ, pltCtx, EImportance, evalResult, measure);
+            return updateEnvelope(scene, pred, succ, pltCtx, EImportance, throughput, measure);
         else 
-            return updateEnvelope(scene, succ, pred, pltCtx, ERadiance, evalResult, measure);
+            return updateEnvelope(scene, succ, pred, pltCtx, ERadiance, throughput, measure);
     }
 
     const auto mode = EImportance;
@@ -968,8 +972,8 @@ bool PathVertex::update(const Scene *scene, const PathVertex *pred,
     weight[mode]    = result.first;
     weight[1-mode]  = result.second;
 
-    if (evalResult)
-        *evalResult *= weight[noninteraction_mode];
+    if (throughput)
+        *throughput *= weight[noninteraction_mode];
     if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
         return false;
 
@@ -1113,11 +1117,13 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                     woDotGeoN * Frame::cosTheta(bRec.wo) <= 0)
                     return nullresult;
 
-                importanceResult = radianceResult = bsdf->eval(bRec, *radiancePacket, measure);
+                auto eta = 1.f;
+                importanceResult = radianceResult = bsdf->eval(bRec, eta, *radiancePacket, measure);
                 
                 importanceResult *= std::abs(
                     (Frame::cosTheta(bRec.wi) * woDotGeoN) /
                     (Frame::cosTheta(bRec.wo) * wiDotGeoN));
+                radianceResult /= sqr(eta);
 
                 if (measure != EDiscrete && Frame::cosTheta(bRec.wo) != 0) {
                     importanceResult /= std::abs(Frame::cosTheta(bRec.wo));

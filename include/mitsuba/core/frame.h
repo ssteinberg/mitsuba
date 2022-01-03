@@ -52,7 +52,7 @@ struct Frame {
     }
 
     /// Construct a new sp-coordinate frame
-    inline static Frame spframe(const Vector &wo, const Normal &n) {
+    inline static Frame spframe(const Vector &wo, const Normal &n = Vector3{ 0,0,1 }) {
         Frame f;
         f.n = wo;
 
