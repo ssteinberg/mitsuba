@@ -483,7 +483,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
     
     std::pair<Spectrum,Spectrum> eval(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
-        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        RadiancePacket *rpp, const PLTContext &pltCtx,
         EMeasure measure = EArea) const;
 
     /**
@@ -505,7 +505,7 @@ struct MTS_EXPORT_BIDIR PathVertex {
 
     bool update(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
-        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        RadiancePacket *rpp, const PLTContext &pltCtx,
         ETransportMode noninteraction_mode,
         Spectrum *throughput = nullptr, EMeasure measure = EArea);
 

@@ -101,17 +101,6 @@ struct RadiancePacket {
         ls[s] = Vector4{ Lx+Ly,Lx-Ly,dlp*sqrtLxLy,cp*sqrtLxLy };
     }
     
-    // In microns^2
-    // const auto coherenceArea_x(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_x.det()); }
-    // const auto coherenceArea_y(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_y.det()); }
-    const auto coherenceArea(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T.det()); }
-    const auto transverseMutualCoherence(Float k, const Vector2 &v) const noexcept {
-        Matrix2x2 invT;
-        (sqr(r/k) * this->T).invert(invT);
-        const auto x = dot(v,invT*v);
-        return std::exp(-.5f*x);
-    }
-    
     // const auto Thetax(Float k, Float sigma_zz) const noexcept {
     //     const auto T = sqr(r/k) * T_x;
     //     return Matrix3x3(T.m[0][0], T.m[0][1], 0,
@@ -178,6 +167,27 @@ struct RadiancePacket {
         return *this;
     }
     
+    // In microns^2
+    // const auto coherenceArea_x(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_x.det()); }
+    // const auto coherenceArea_y(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_y.det()); }
+    const auto coherenceArea(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T.det()); }
+    // Returns the spatial coherence variance in direction v
+    const auto coherenceLength(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
+        const auto &invT = invTheta(k, sigma_zz);
+        return dot(v,(Matrix3x3)invT*v);
+    }
+    const auto mutualCoherence(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
+        const auto &invT = invTheta(k, sigma_zz);
+        const auto x = dot(v,(Matrix3x3)invT*v);
+        return std::exp(-.5f*x);
+    }
+    const auto transverseMutualCoherence(Float k, const Vector2 &v) const noexcept {
+        Matrix2x2 invT;
+        (sqr(r/k) * this->T).invert(invT);
+        const auto x = dot(v,invT*v);
+        return std::exp(-.5f*x);
+    }
+    
     const auto begin() const noexcept { return ls.begin(); }
     const auto end() const noexcept { return ls.end(); }
     auto begin() noexcept { return ls.begin(); }
@@ -195,7 +205,7 @@ inline auto sourceLight(Spectrum emission, const PLTContext &ctx) {
     RadiancePacket rad{};
     for (auto i=0;i<SPECTRUM_SAMPLES;++i) 
         rad.ls[i] = Vector4{ emission[i],0,0,0 };
-    const auto c = ctx.Omega/ctx.A;
+    const auto c = 2 * M_PI * ctx.Omega/ctx.A;
     // rad.T_x = rad.T_y = Matrix2x2(c,0,0,c);
     rad.T = Matrix2x2(c,0,0,c);
     rad.r = 0;

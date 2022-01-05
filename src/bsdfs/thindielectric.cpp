@@ -130,7 +130,8 @@ public:
         }
     }
     
-    inline void handle_birefringence(Float &Lx, Float &Ly, RadiancePacket &radiancePacket, 
+    inline void handle_birefringence(Float &Lx, Float &Ly, 
+                                     const RadiancePacket &radPac, const PLTContext &pltCtx,
                                      const Intersection &its, Float birefringence, const Vector3 &wi, 
                                      Float k, bool refl) const {
         const auto phii = std::atan2(wi.y,wi.x);
@@ -141,7 +142,7 @@ public:
         A *= std::sqrt(1-sqr(m_A.z));
         A.y = math::sgn(wi.z) * m_A.z;
         const auto A2 = Vector3{ A.x,-A.y,A.z };
-        const auto Z = radiancePacket.f.toLocal(its.toWorld(Vector3{ std::cos(phii),std::sin(phii),0 }));
+        const auto Z = radPac.f.toLocal(BSDF::getFrame(its).toWorld(Vector3{ std::cos(phii),std::sin(phii),0 }));
 
         const float ei = m_etai;
         const float eo = m_etao;
@@ -180,7 +181,7 @@ public:
             const auto ps = tpo*tos + tpe*tes;
             const auto pp = tpo*top + tpe*tep;
             const auto oez = std::abs(Ioz-Iez);
-            const auto mutual_coh = radiancePacket.transverseMutualCoherence(k, oez * Vector2{ Z.x,Z.y });   // in micron
+            const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
             const auto t = mutual_coh * std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
 
             const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + 2*ss*ps*t*sqrtLxLy);
@@ -225,7 +226,7 @@ public:
     }
 
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
-                  RadiancePacket &radiancePacket, EMeasure measure) const { 
+                  RadiancePacket &radPac, EMeasure measure) const { 
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
         bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
@@ -236,11 +237,11 @@ public:
              || Frame::cosTheta(bRec.wi) == 0)
             return Spectrum(0.0f);
         
-        Assert(bRec.mode==EImportance && radiancePacket.isValid());
+        Assert(bRec.mode==EImportance && radPac.isValid());
         Assert(!!bRec.pltCtx);
         
         // Rotate to sp-frame first
-        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+        radPac.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
 
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                         m_specularTransmittance->eval(bRec.its);
@@ -259,41 +260,42 @@ public:
                 return Spectrum(0.0f);
         }
         
-        const auto& in = radiancePacket.spectrum();
+        const auto& in = radPac.spectrum();
         Spectrum result = Spectrum(.0f);
-        for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
+        for (std::size_t idx=0; idx<radPac.size(); ++idx) {
             const auto k = Spectrum::ks()[idx];
             if (isReflection) {
                 const auto& M = R.m[0][0]<1-Epsilon ? (Matrix4x4)(R + T * R * invOneMinusR * T) : R;
-                radiancePacket.L(idx) = m00[idx] * (M * radiancePacket.S(idx));
+                radPac.L(idx) = m00[idx] * (M * radPac.S(idx));
             }
             else {
                 // Transmission effects
                 const auto B = m_birefringence->eval(bRec.its).average();
                 if (B!=.0f) {
-                    auto Lx = radiancePacket.Lx(idx);
-                    auto Ly = radiancePacket.Ly(idx);
-                    handle_birefringence(Lx, Ly, radiancePacket, bRec.its, B, bRec.wi, k, false);
+                    auto Lx = radPac.Lx(idx);
+                    auto Ly = radPac.Ly(idx);
+                    handle_birefringence(Lx, Ly, radPac, *bRec.pltCtx, bRec.its, B, bRec.wi, k, false);
 
-                    radiancePacket.setL(idx, Lx, Ly);
+                    radPac.setL(idx, Lx, Ly);
                 }
                 else {
                     const auto& M = R.m[0][0]<1-Epsilon ? (Matrix4x4)(T * invOneMinusR * T) : T;
-                    radiancePacket.L(idx) = m00[idx] * (M * radiancePacket.S(idx));
+                    radPac.L(idx) = m00[idx] * (M * radPac.S(idx));
                 }
 
                 // Polarizer
                 if (m_polarizer) {
-                    const auto& d = radiancePacket.f.toLocal(bRec.its.toWorld({ std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 }));
+                    const auto& d = radPac.f.toLocal(BSDF::getFrame(bRec.its).toWorld(
+                        { std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 }));
                     const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
-                    auto L = (Matrix4x4)P * radiancePacket.S(idx);
+                    auto L = (Matrix4x4)P * radPac.S(idx);
                     L[0] = std::max(.0f, L[0]);
-                    radiancePacket.L(idx) = L;
+                    radPac.L(idx) = L;
                 }
             }
 
             if (in[idx]>RCPOVERFLOW)
-                result[idx] = radiancePacket.S(idx)[0] / in[idx];
+                result[idx] = radPac.S(idx)[0] / in[idx];
         }
 
         return result;

@@ -120,29 +120,29 @@ public:
     }
 
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
-                  RadiancePacket &radiancePacket, EMeasure measure) const {
+                  RadiancePacket &rpp, EMeasure measure) const {
         if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0) 
             return Spectrum(.0f);
 
-        Assert(bRec.mode==EImportance && radiancePacket.isValid());
+        Assert(bRec.mode==EImportance && rpp.isValid());
         Assert(!!bRec.pltCtx);
 
         const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
         const auto M = Float(1);
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         
-        const auto& in = radiancePacket.spectrum();
+        const auto& in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
-        for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
-            radiancePacket.L(idx) = costheta_o * m00[idx] * M * radiancePacket.S(idx);
+        for (std::size_t idx=0; idx<rpp.size(); ++idx) {
+            rpp.L(idx) = costheta_o * m00[idx] * M * rpp.S(idx);
 
             if (in[idx]>RCPOVERFLOW)
-                result[idx] = radiancePacket.L(idx)[0] / in[idx];
+                result[idx] = rpp.L(idx)[0] / in[idx];
         }
         
-        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
+        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
 
         return result;
     }

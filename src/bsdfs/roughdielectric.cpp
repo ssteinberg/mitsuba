@@ -20,14 +20,13 @@
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/hw/basicshader.h>
-#include "microfacet.h"
-#include "ior.h"
 #include "mitsuba/core/constants.h"
 #include "mitsuba/core/util.h"
 #include "mitsuba/plt/mueller.hpp"
 #include "mitsuba/render/common.h"
 #include <mitsuba/plt/plt.hpp>
 #include <mitsuba/plt/gaussianSurface.hpp>
+#include "ior.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -182,7 +181,7 @@ public:
     }
 
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
-                  RadiancePacket &radiancePacket, EMeasure measure) const { 
+                  RadiancePacket &rpp, EMeasure measure) const { 
         const auto hasDirect = (bRec.typeMask & EDirect)
                 && (bRec.component == -1 || bRec.component == 0 || bRec.component == 1)
                 && measure == EDiscrete;
@@ -195,7 +194,7 @@ public:
             (isReflection && bRec.component != -1 && bRec.component != 0 && bRec.component != 2))
             return Spectrum(0.0f);
         
-        Assert(bRec.mode==EImportance && radiancePacket.isValid());
+        Assert(bRec.mode==EImportance && rpp.isValid());
         Assert(!!bRec.pltCtx);
         
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
@@ -224,34 +223,34 @@ public:
                 return Spectrum(.0f);
         }
         
-        const auto fi = radiancePacket.f;
+        const auto fi = rpp.f;
         Matrix3x3 Q = Matrix3x3(bRec.its.toLocal(fi.s),
                                 bRec.its.toLocal(fi.t),
                                 bRec.its.toLocal(fi.n)), Qt;
         Q.transpose(Qt);
         
         // Rotate to sp-frame first
-        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
 
         const auto k = Spectrum::ks().average();
         const auto D = !hasDirect ? 
-                       gaussianSurface::diffract(radiancePacket.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+                       gaussianSurface::diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
                                                  sigma2, Q,Qt, k*h) : .0f;
         const auto M = !hasDirect ? 
                        MuellerFresnelDielectric(dot(bRec.wi,m), m_eta, isReflection) :
                        MuellerFresnelDielectric(Frame::cosTheta(bRec.wi), m_eta, isReflection);
         
-        const auto& in = radiancePacket.spectrum();
+        const auto& in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
-        for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
-            auto L = m00[idx] * ((Matrix4x4)M * radiancePacket.S(idx));
+        for (std::size_t idx=0; idx<rpp.size(); ++idx) {
+            auto L = m00[idx] * ((Matrix4x4)M * rpp.S(idx));
             L *= hasDirect ?
                 a[idx] :
                 (costheta_o * (1-a[idx]) * D);
 
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = L[0] / in[idx];
-            radiancePacket.L(idx) = L;
+            rpp.L(idx) = L;
         }
 
         eta = isReflection ? 1.0f : bRec.wo.z<.0f ? m_eta : m_invEta;

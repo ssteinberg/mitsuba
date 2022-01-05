@@ -190,6 +190,7 @@ public:
         }
 
         its.shFrame.n = normalize(trafo(Normal(0, 0, 1)));
+        its.geoFrame = Frame(normalize(its.dpdu), normalize(its.dpdv), its.shFrame.n);
         its.uv = Point2(r, phi * INV_TWOPI);
         its.p = ray(its.t);
         its.hasUVPartials = false;

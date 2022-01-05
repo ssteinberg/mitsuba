@@ -5,6 +5,7 @@ plugins += env.SharedLibrary('diffuse', ['diffuse.cpp'])
 plugins += env.SharedLibrary('dielectric', ['roughdielectric.cpp'])
 plugins += env.SharedLibrary('conductor', ['roughconductor.cpp'])
 plugins += env.SharedLibrary('thindielectric', ['thindielectric.cpp'])
+plugins += env.SharedLibrary('grating', ['grating.cpp'])
 
 # Basic library of smooth and rough materials
 # plugins += env.SharedLibrary('plastic', ['plastic.cpp'])

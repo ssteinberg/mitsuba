@@ -395,11 +395,11 @@ public:
     }
     
     virtual Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
-            RadiancePacket &radiancePacket, EMeasure measure = ESolidAngle) const = 0;
+            RadiancePacket &rpp, EMeasure measure = ESolidAngle) const = 0;
     inline Spectrum eval(const BSDFSamplingRecord &bRec, 
-            RadiancePacket &radiancePacket, EMeasure measure = ESolidAngle) const {
+            RadiancePacket &rpp, EMeasure measure = ESolidAngle) const {
         Float unused;
-        return eval(bRec, unused, radiancePacket, measure);
+        return eval(bRec, unused, rpp, measure);
     }
 
     /**

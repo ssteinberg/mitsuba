@@ -953,11 +953,11 @@ Spectrum PathVertex::envelope(const Scene *scene, const PathVertex *pred,
 
 bool PathVertex::update(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
-        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        RadiancePacket *rpp, const PLTContext &pltCtx,
         ETransportMode noninteraction_mode,
         Spectrum *throughput, EMeasure measure) {
     // Update radiance packet
-    const auto result = eval(scene, pred, succ, radiancePacket, pltCtx, measure);
+    const auto result = eval(scene, pred, succ, rpp, pltCtx, measure);
 
     if (!isSurfaceInteraction() && !isMediumInteraction()) {
         if (noninteraction_mode==EImportance) 
@@ -1016,20 +1016,20 @@ bool PathVertex::update(const Scene *scene, const PathVertex *pred,
 
 std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVertex *pred,
         const PathVertex *succ, 
-        RadiancePacket *radiancePacket, const PLTContext &pltCtx,
+        RadiancePacket *rpp, const PLTContext &pltCtx,
         EMeasure measure) const {
     const auto& nullresult = std::make_pair(Spectrum(.0f), Spectrum(.0f));
     Spectrum importanceResult(.0f), radianceResult(.0f);
     Vector wo(0.0f);
     
     if (type != EEmitterSupernode && type != EEmitterSample) {
-        BDAssert(radiancePacket->isValid() && !!pred);
+        BDAssert(rpp->isValid() && !!pred);
         
         // Propagate radiance packet
         const auto src = pred->getPosition();
         const auto pos = this->getPosition();
         const auto len = (pos-src).length();
-        radiancePacket->r += len;
+        rpp->r += len;
     }
 
     switch (type) {
@@ -1041,7 +1041,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 pRec.measure = measure;
                 importanceResult = emitter->evalPosition(pRec);
 
-                *radiancePacket = sourceLight(importanceResult, pltCtx);
+                *rpp = sourceLight(importanceResult, pltCtx);
             }
             break;
 
@@ -1071,7 +1071,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                     radianceResult /= dp;
                 }
 
-                radiancePacket->setFrame(wo);
+                rpp->setFrame(wo);
             }
             break;
 
@@ -1118,7 +1118,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                     return nullresult;
 
                 auto eta = 1.f;
-                importanceResult = radianceResult = bsdf->eval(bRec, eta, *radiancePacket, measure);
+                importanceResult = radianceResult = bsdf->eval(bRec, eta, *rpp, measure);
                 
                 importanceResult *= std::abs(
                     (Frame::cosTheta(bRec.wi) * woDotGeoN) /
@@ -1158,7 +1158,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
     }
     
     if (!isSupernode())
-        *radiancePacket *= importanceResult;
+        *rpp *= importanceResult;
 
     return std::make_pair(importanceResult,radianceResult);
 }
