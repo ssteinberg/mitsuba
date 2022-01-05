@@ -25,7 +25,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/common.h>
 #include <mitsuba/render/shader.h>
-#include <mitsuba/plt/plt.h>
+#include <mitsuba/plt/plt.hpp>
 
 MTS_NAMESPACE_BEGIN
 

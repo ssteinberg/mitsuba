@@ -6,7 +6,7 @@
 
 #include "mitsuba/core/constants.h"
 #include <mitsuba/core/platform.h>
-#include <mitsuba/plt/plt.h>
+#include <mitsuba/plt/plt.hpp>
 #include <mitsuba/core/warp.h>
 #include <mitsuba/core/math.h>
 #include <mitsuba/core/spectrum.h>

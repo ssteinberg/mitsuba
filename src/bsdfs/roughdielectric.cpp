@@ -24,9 +24,9 @@
 #include "ior.h"
 #include "mitsuba/core/constants.h"
 #include "mitsuba/core/util.h"
-#include "mitsuba/plt/mueller.h"
+#include "mitsuba/plt/mueller.hpp"
 #include "mitsuba/render/common.h"
-#include <mitsuba/plt/plt.h>
+#include <mitsuba/plt/plt.hpp>
 #include <mitsuba/plt/gaussianSurface.hpp>
 
 MTS_NAMESPACE_BEGIN
@@ -124,16 +124,7 @@ public:
         Float scale = -(cosThetaT < 0 ? m_invEta : m_eta);
         return Vector(scale*wi.x, scale*wi.y, cosThetaT);
     }
-    // Not accurate!!
-    inline Vector refract(const Vector &w) const {
-        Float scale = -(w.z > .0f ? m_invEta : m_eta);
-        auto v = scale * Vector{ w.x, w.y, 0 };
-        const auto l = v.lengthSquared();
-        if (l>1)
-            return Vector{ 0,0,0 };
-        v.z = std::sqrt(1-l) * (-math::sgn(w.z));
-        return v;
-    }
+    // Cheap lame approximation
     inline Vector scattered_wo(const Vector &wo) const {
         return -reflect(wo);//reflect(refract(wo));
     }
@@ -222,7 +213,7 @@ public:
             return Spectrum(.0f);
         Assert(wo.z*bRec.wi.z>=.0f);
         
-        if (!hasDirect && a.average()==1)
+        if (!hasDirect && a.average() >= 1-Epsilon)
             return Spectrum(.0f);
         if (hasDirect) {
             Float costheta_t;
@@ -264,7 +255,6 @@ public:
         }
 
         eta = isReflection ? 1.0f : bRec.wo.z<.0f ? m_eta : m_invEta;
-        Assert(std::isfinite(result[0]));
         return result;
     }
 

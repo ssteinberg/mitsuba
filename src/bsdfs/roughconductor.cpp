@@ -24,7 +24,7 @@
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/vector.h>
 #include <mitsuba/core/warp.h>
-#include <mitsuba/plt/mueller.h>
+#include <mitsuba/plt/mueller.hpp>
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/shape.h>
 
@@ -184,7 +184,7 @@ public:
         const auto m = normalize(bRec.wo+bRec.wi);
         const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
         
-        if (!hasDirect && a.average()==1)
+        if (!hasDirect && a.average() >= 1-Epsilon)
             return Spectrum(.0f);
         if (hasDirect && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
             return Spectrum(.0f);

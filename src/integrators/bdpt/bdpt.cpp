@@ -18,7 +18,7 @@
 
 #include <mitsuba/bidir/vertex.h>
 #include <mitsuba/bidir/edge.h>
-#include <mitsuba/plt/plt.h>
+#include <mitsuba/plt/plt.hpp>
 #include "bdpt_proc.h"
 
 MTS_NAMESPACE_BEGIN

@@ -19,7 +19,7 @@
 #include <mitsuba/core/statistics.h>
 #include <mitsuba/core/sfcurve.h>
 #include <mitsuba/bidir/util.h>
-#include <mitsuba/plt/plt.h>
+#include <mitsuba/plt/plt.hpp>
 #include "bdpt_proc.h"
 #include "mitsuba/bidir/common.h"
 

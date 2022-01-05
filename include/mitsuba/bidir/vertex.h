@@ -17,7 +17,7 @@
 */
 
 #pragma once
-#include "mitsuba/plt/plt.h"
+#include "mitsuba/plt/plt.hpp"
 #include "mitsuba/render/common.h"
 #if !defined(__MITSUBA_BIDIR_VERTEX_H_)
 #define __MITSUBA_BIDIR_VERTEX_H_

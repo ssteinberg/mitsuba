@@ -16,58 +16,18 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <cmath>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/hw/basicshader.h>
+#include <mitsuba/core/constants.h>
 #include "ior.h"
+#include "mitsuba/core/math.h"
+
+#include <mitsuba/plt/plt.hpp>
+#include <mitsuba/plt/birefringence.hpp>
 
 MTS_NAMESPACE_BEGIN
 
-/*!\plugin{thindielectric}{Thin dielectric material}
- * \order{4}
- * \parameters{
- *     \parameter{intIOR}{\Float\Or\String}{Interior index of refraction specified
- *      numerically or using a known material name. \default{\texttt{bk7} / 1.5046}}
- *     \parameter{extIOR}{\Float\Or\String}{Exterior index of refraction specified
- *      numerically or using a known material name. \default{\texttt{air} / 1.000277}}
- *     \parameter{specular\showbreak Reflectance}{\Spectrum\Or\Texture}{Optional
- *         factor that can be used to modulate the specular reflection component. Note
- *         that for physical realism, this parameter should never be touched. \default{1.0}}
- *     \parameter{specular\showbreak Transmittance}{\Spectrum\Or\Texture}{Optional
- *         factor that can be used to modulate the specular transmission component. Note
- *         that for physical realism, this parameter should never be touched. \default{1.0}}
- * }
- *
- * This plugin models a \emph{thin} dielectric material that is embedded inside another
- * dielectric---for instance, glass surrounded by air. The interior of the material
- * is assumed to be so thin that its effect on transmitted rays is negligible,
- * Hence, light exits such a material without any form of angular deflection
- * (though there is still specular reflection).
- *
- * This model should be used for things like glass windows that were modeled using only a
- * single sheet of triangles or quads. On the other hand, when the window consists of
- * proper closed geometry, \pluginref{dielectric} is the right choice. This is illustrated below:
- *
- * \begin{figure}[h]
- * \setcounter{subfigure}{0}
- * \centering
- * \hfill
- * \subfloat[The \pluginref{dielectric} plugin models a single transition from one index of refraction to another]
- *     {\includegraphics[width=4.5cm]{images/bsdf_dielectric_figure.pdf}}\hfill
- * \subfloat[The \pluginref{thindielectric} plugin models a pair of interfaces causing a transient index of refraction change]
- *      {\includegraphics[width=4.5cm]{images/bsdf_thindielectric_figure.pdf}}\hfill
- * \subfloat[Windows modeled using a single sheet of geometry are the most frequent application of this BSDF]
- *      {\fbox{\includegraphics[width=4.5cm]{images/bsdf_thindielectric_window.jpg}}}\hspace*\fill
- * \caption{
- *     \label{fig:thindielectric-diff}
- *     An illustration of the difference between the \pluginref{dielectric} and \pluginref{thindielectric} plugins}
- * \end{figure}
- *
- * The implementation correctly accounts for multiple internal reflections
- * inside the thin dielectric at \emph{no significant extra cost}, i.e. paths
- * of the type $R, TRT, TR^3T, ..$ for reflection and $TT, TR^2, TR^4T, ..$ for
- * refraction, where $T$ and $R$ denote individual reflection and refraction
- * events, respectively.
- */
 class ThinDielectric : public BSDF {
 public:
     ThinDielectric(const Properties &props) : BSDF(props) {
@@ -82,6 +42,19 @@ public:
                 "refraction must be positive!");
 
         m_eta = intIOR / extIOR;
+        m_etai = extIOR;
+        m_etao = intIOR;
+        
+        // optic axis and thickness for birefringent matrials
+        m_A = props.getVector("opticAxis", Vector3{ 0,0,1 });
+        m_A = normalize(m_A);
+        m_tau = new ConstantFloatTexture(props.getFloat("thickness", .0f));
+        m_birefringence = new ConstantFloatTexture(props.getFloat("birefringence", .0f));
+        
+        if (props.hasProperty("polarizer")) {
+            m_polarizer = true;
+            m_polarizationDir = props.getFloat("polarizer");
+        }
 
         m_specularReflectance = new ConstantSpectrumTexture(
             props.getSpectrum("specularReflectance", Spectrum(1.0f)));
@@ -92,8 +65,17 @@ public:
     ThinDielectric(Stream *stream, InstanceManager *manager)
             : BSDF(stream, manager) {
         m_eta = stream->readFloat();
+        m_etai = stream->readFloat();
+        m_etao = stream->readFloat();
+        m_A[0] = stream->readFloat();
+        m_A[1] = stream->readFloat();
+        m_A[2] = stream->readFloat();
         m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
         m_specularTransmittance = static_cast<Texture *>(manager->getInstance(stream));
+        m_birefringence = static_cast<Texture *>(manager->getInstance(stream));
+        m_tau = static_cast<Texture *>(manager->getInstance(stream));
+        m_polarizer = stream->readBool();
+        m_polarizationDir = stream->readFloat();
         configure();
     }
 
@@ -101,28 +83,32 @@ public:
         BSDF::serialize(stream, manager);
 
         stream->writeFloat(m_eta);
+        stream->writeFloat(m_etai);
+        stream->writeFloat(m_etao);
+        stream->writeFloat(m_A[0]);
+        stream->writeFloat(m_A[1]);
+        stream->writeFloat(m_A[2]);
         manager->serialize(stream, m_specularReflectance.get());
         manager->serialize(stream, m_specularTransmittance.get());
+        manager->serialize(stream, m_birefringence.get());
+        manager->serialize(stream, m_tau.get());
+        stream->writeBool(m_polarizer);
+        stream->writeFloat(m_polarizationDir);
     }
 
     void configure() {
+        unsigned int extraFlags = 0;
+        if (!m_specularReflectance->isConstant() || !m_specularTransmittance->isConstant())
+            extraFlags |= ESpatiallyVarying;
+        m_components.clear();
+        m_components.push_back(EDirectReflection | EFrontSide | EBackSide | extraFlags);
+        m_components.push_back(EDirectTransmission | EFrontSide | EBackSide | extraFlags);
+
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
             m_specularReflectance, "specularReflectance", 1.0f);
         m_specularTransmittance = ensureEnergyConservation(
             m_specularTransmittance, "specularTransmittance", 1.0f);
-
-        m_components.clear();
-        m_components.push_back(EDeltaReflection | EFrontSide | EBackSide
-            | (m_specularReflectance->isConstant() ? 0 : ESpatiallyVarying));
-        m_components.push_back(ENull | EFrontSide | EBackSide
-            | (m_specularTransmittance->isConstant() ? 0 : ESpatiallyVarying));
-
-        m_usesRayDifferentials = false;
-
-        m_usesRayDifferentials =
-            m_specularReflectance->usesRayDifferentials() ||
-            m_specularTransmittance->usesRayDifferentials();
 
         BSDF::configure();
     }
@@ -133,32 +119,95 @@ public:
                 m_specularReflectance = static_cast<Texture *>(child);
             else if (name == "specularTransmittance")
                 m_specularTransmittance = static_cast<Texture *>(child);
+            else if (name == "birefringence")
+                m_birefringence = static_cast<Texture *>(child);
+            else if (name == "thickness")
+                m_tau = static_cast<Texture *>(child);
             else
                 BSDF::addChild(name, child);
         } else {
             BSDF::addChild(name, child);
         }
     }
+    
+    inline void handle_birefringence(Float &Lx, Float &Ly, RadiancePacket &radiancePacket, 
+                                     const Intersection &its, Float birefringence, const Vector3 &wi, 
+                                     Float k, bool refl) const {
+        const auto phii = std::atan2(wi.y,wi.x);
+        const auto phiA = std::atan2(m_A.y, m_A.x)-phii;
 
-    /// Reflection in local coordinates
+        const auto I = Vector3{ 0,std::abs(wi.z),std::sqrt(1-sqr(wi.z)) };
+        auto A = Vector3{ std::cos(phiA),0,std::sin(phiA) };
+        A *= std::sqrt(1-sqr(m_A.z));
+        A.y = math::sgn(wi.z) * m_A.z;
+        const auto A2 = Vector3{ A.x,-A.y,A.z };
+        const auto Z = radiancePacket.f.toLocal(its.toWorld(Vector3{ std::cos(phii),std::sin(phii),0 }));
+
+        const float ei = m_etai;
+        const float eo = m_etao;
+        const float ee = eo + birefringence*.2f;
+        const auto tau = m_tau->eval(its).average() * 1e+6f; // in micron
+        
+        // Downwards and upwards propagating ordinary and extraordinary vectors in the slab
+        Vector3 Io, Io2, Ie, Ie2;
+        // Effeective refractive indices of the extraordinary vectors
+        float e_eff, e_eff2;
+        birefringence::vectors_in_slab(I, ei,eo,ee, A, Io, Io2, Ie, Ie2, e_eff, e_eff2);
+
+        // Fresnel coefficients
+        float rss, rsp, tso, tse, rps, rpp, tpo, tpe;
+        // float r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep;
+        float roo, roe, tos, top, reo, ree, tes, tep;
+        birefringence::fresnel_iso_aniso(I.y,I.z, ei,eo,ee, A,  rss, rsp, tso, tse, rps, rpp, tpo, tpe);
+        // birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A,  r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep);
+        birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A2, roo, roe, tos, top, reo, ree, tes, tep);
+        
+        // Offsets
+        const float Ioz =  std::abs(tau / Io.y)  * Io.z;
+        const float Iez =  std::abs(tau / Ie.y)  * Ie.z;
+        // const float Ioz2 = std::abs(tau / Io2.y) * Io2.z;
+        // const float Iez2 = std::abs(tau / Ie2.y) * Ie2.z;
+        // OPLs
+        const float OPLo =  std::abs(tau / Io.y)  * eo;
+        const float OPLe =  std::abs(tau / Ie.y)  * e_eff;
+        // const float OPLo2 = std::abs(tau / Io2.y) * eo;
+        // const float OPLe2 = std::abs(tau / Ie2.y) * e_eff2;
+
+        const auto sqrtLxLy = std::sqrt(Lx*Ly);
+        if (!refl) {
+            const auto ss = tso*tos + tse*tes;
+            const auto sp = tso*top + tse*tep;
+            const auto ps = tpo*tos + tpe*tes;
+            const auto pp = tpo*top + tpe*tep;
+            const auto oez = std::abs(Ioz-Iez);
+            const auto mutual_coh = radiancePacket.transverseMutualCoherence(k, oez * Vector2{ Z.x,Z.y });   // in micron
+            const auto t = mutual_coh * std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
+
+            const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + 2*ss*ps*t*sqrtLxLy);
+            Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
+            Lx = nLx;
+        }
+        else {
+            Assert(false && "Not implemented!");
+        }
+    }
+
     inline Vector reflect(const Vector &wi) const {
         return Vector(-wi.x, -wi.y, wi.z);
     }
-
-    /// Transmission in local coordinates
     inline Vector transmit(const Vector &wi) const {
         return -wi;
     }
-
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        bool sampleReflection   = (bRec.typeMask & EDeltaReflection)
+    
+    Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
+        bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
-        bool sampleTransmission = (bRec.typeMask & ENull)
+        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
+ 
+        Assert(!!bRec.pltCtx);
 
         Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
-
-        // Account for internal reflections: R' = R + TRT + TR^3T + ..
         if (R < 1)
             R += T*T * R / (1-R*R);
 
@@ -175,15 +224,88 @@ public:
         }
     }
 
-    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        bool sampleReflection   = (bRec.typeMask & EDeltaReflection)
+    Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
+                  RadiancePacket &radiancePacket, EMeasure measure) const { 
+        bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
-        bool sampleTransmission = (bRec.typeMask & ENull)
+        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
+                && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
+        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) >= 0;
+
+        if ((!sampleReflection && isReflection) || (!sampleTransmission && !isReflection) 
+             || Frame::cosTheta(bRec.wi) == 0)
+            return Spectrum(0.0f);
+        
+        Assert(bRec.mode==EImportance && radiancePacket.isValid());
+        Assert(!!bRec.pltCtx);
+        
+        // Rotate to sp-frame first
+        radiancePacket.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+
+        const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
+                                        m_specularTransmittance->eval(bRec.its);
+        
+        const auto costheta_i = std::abs(Frame::cosTheta(bRec.wi));
+        const auto R = MuellerFresnelRDielectric(costheta_i, m_eta),
+                   invOneMinusR = invOneMinusMuellerFresnelRDielectric(costheta_i, m_eta),
+                   T = MuellerFresnelTDielectric(costheta_i, m_eta);
+        
+        Matrix4x4 M;
+        if (isReflection) {
+            if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
+                return Spectrum(0.0f);
+        } else {
+            if (std::abs(dot(transmit(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
+                return Spectrum(0.0f);
+        }
+        
+        const auto& in = radiancePacket.spectrum();
+        Spectrum result = Spectrum(.0f);
+        for (std::size_t idx=0; idx<radiancePacket.size(); ++idx) {
+            const auto k = Spectrum::ks()[idx];
+            if (isReflection) {
+                const auto& M = R.m[0][0]<1-Epsilon ? (Matrix4x4)(R + T * R * invOneMinusR * T) : R;
+                radiancePacket.L(idx) = m00[idx] * (M * radiancePacket.S(idx));
+            }
+            else {
+                // Transmission effects
+                const auto B = m_birefringence->eval(bRec.its).average();
+                if (B!=.0f) {
+                    auto Lx = radiancePacket.Lx(idx);
+                    auto Ly = radiancePacket.Ly(idx);
+                    handle_birefringence(Lx, Ly, radiancePacket, bRec.its, B, bRec.wi, k, false);
+
+                    radiancePacket.setL(idx, Lx, Ly);
+                }
+                else {
+                    const auto& M = R.m[0][0]<1-Epsilon ? (Matrix4x4)(T * invOneMinusR * T) : T;
+                    radiancePacket.L(idx) = m00[idx] * (M * radiancePacket.S(idx));
+                }
+
+                // Polarizer
+                if (m_polarizer) {
+                    const auto& d = radiancePacket.f.toLocal(bRec.its.toWorld({ std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 }));
+                    const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
+                    auto L = (Matrix4x4)P * radiancePacket.S(idx);
+                    L[0] = std::max(.0f, L[0]);
+                    radiancePacket.L(idx) = L;
+                }
+            }
+
+            if (in[idx]>RCPOVERFLOW)
+                result[idx] = radiancePacket.S(idx)[0] / in[idx];
+        }
+
+        return result;
+    }
+
+    Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
+        bool sampleReflection   = (bRec.typeMask & EDirectReflection)
+                && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
+        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
 
         Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
-
-        // Account for internal reflections: R' = R + TRT + TR^3T + ..
         if (R < 1)
             R += T*T * R / (1-R*R);
 
@@ -200,80 +322,27 @@ public:
         }
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        bool sampleReflection   = (bRec.typeMask & EDeltaReflection)
-                && (bRec.component == -1 || bRec.component == 0);
-        bool sampleTransmission = (bRec.typeMask & ENull)
-                && (bRec.component == -1 || bRec.component == 1);
-
-        Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
-
-        // Account for internal reflections: R' = R + TRT + TR^3T + ..
-        if (R < 1)
-            R += T*T * R / (1-R*R);
-
-        if (sampleTransmission && sampleReflection) {
-            if (sample.x <= R) {
-                bRec.sampledComponent = 0;
-                bRec.sampledType = EDeltaReflection;
-                bRec.wo = reflect(bRec.wi);
-                bRec.eta = 1.0f;
-                pdf = R;
-
-                return m_specularReflectance->eval(bRec.its);
-            } else {
-                bRec.sampledComponent = 1;
-                bRec.sampledType = ENull;
-                bRec.wo = transmit(bRec.wi);
-                bRec.eta = 1.0f;
-                pdf = 1-R;
-
-                return m_specularTransmittance->eval(bRec.its);
-            }
-        } else if (sampleReflection) {
-            bRec.sampledComponent = 0;
-            bRec.sampledType = EDeltaReflection;
-            bRec.wo = reflect(bRec.wi);
-            bRec.eta = 1.0f;
-            pdf = 1.0f;
-
-            return m_specularReflectance->eval(bRec.its) * R;
-        } else if (sampleTransmission) {
-            bRec.sampledComponent = 1;
-            bRec.sampledType = ENull;
-            bRec.wo = transmit(bRec.wi);
-            bRec.eta = 1.0f;
-            pdf = 1.0f;
-
-            return m_specularTransmittance->eval(bRec.its) * (1-R);
-        }
-
-        return Spectrum(0.0f);
-    }
-
     Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        bool sampleReflection   = (bRec.typeMask & EDeltaReflection)
+        bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0);
-        bool sampleTransmission = (bRec.typeMask & ENull)
+        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
                 && (bRec.component == -1 || bRec.component == 1);
 
         Float R = fresnelDielectricExt(Frame::cosTheta(bRec.wi), m_eta), T = 1-R;
-
-        // Account for internal reflections: R' = R + TRT + TR^3T + ..
         if (R < 1)
             R += T*T * R / (1-R*R);
 
         if (sampleTransmission && sampleReflection) {
             if (sample.x <= R) {
                 bRec.sampledComponent = 0;
-                bRec.sampledType = EDeltaReflection;
+                bRec.sampledType = EDirectReflection;
                 bRec.wo = reflect(bRec.wi);
                 bRec.eta = 1.0f;
 
                 return m_specularReflectance->eval(bRec.its);
             } else {
                 bRec.sampledComponent = 1;
-                bRec.sampledType = ENull;
+                bRec.sampledType = EDirectTransmission;
                 bRec.wo = transmit(bRec.wi);
                 bRec.eta = 1.0f;
 
@@ -281,14 +350,14 @@ public:
             }
         } else if (sampleReflection) {
             bRec.sampledComponent = 0;
-            bRec.sampledType = EDeltaReflection;
+            bRec.sampledType = EDirectReflection;
             bRec.wo = reflect(bRec.wi);
             bRec.eta = 1.0f;
 
             return m_specularReflectance->eval(bRec.its) * R;
         } else if (sampleTransmission) {
             bRec.sampledComponent = 1;
-            bRec.sampledType = ENull;
+            bRec.sampledType = EDirectTransmission;
             bRec.wo = transmit(bRec.wi);
             bRec.eta = 1.0f;
 
@@ -296,16 +365,6 @@ public:
         }
 
         return Spectrum(0.0f);
-    }
-
-    Float getEta() const {
-        /* The rrelative IOR across this interface is 1, since the internal
-           material is thin: it begins and ends here. */
-        return 1.0f;
-    }
-
-    Float getRoughness(const Intersection &its, int component) const {
-        return 0.0f;
     }
 
     std::string toString() const {
@@ -319,52 +378,17 @@ public:
         return oss.str();
     }
 
-    Shader *createShader(Renderer *renderer) const;
-
     MTS_DECLARE_CLASS()
 private:
-    Float m_eta;
+    Float m_eta, m_etai, m_etao;
+    Vector3 m_A;
     ref<Texture> m_specularTransmittance;
     ref<Texture> m_specularReflectance;
+    ref<Texture> m_birefringence, m_tau;
+    bool m_polarizer{ false };
+    Float m_polarizationDir;
 };
 
-/* Fake glass shader -- it is really hopeless to visualize
-   this material in the VPL renderer, so let's try to do at least
-   something that suggests the presence of a transparent boundary */
-class ThinDielectricShader : public Shader {
-public:
-    ThinDielectricShader(Renderer *renderer) :
-        Shader(renderer, EBSDFShader) {
-        m_flags = ETransparent;
-    }
-
-    Float getAlpha() const {
-        return 0.3f;
-    }
-
-    void generateCode(std::ostringstream &oss,
-            const std::string &evalName,
-            const std::vector<std::string> &depNames) const {
-        oss << "vec3 " << evalName << "(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    if (cosTheta(wi) < 0.0 || cosTheta(wo) < 0.0)" << endl
-            << "        return vec3(0.0);" << endl
-            << "    return vec3(inv_pi * cosTheta(wo));" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "_diffuse(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    return " << evalName << "(uv, wi, wo);" << endl
-            << "}" << endl;
-    }
-
-
-    MTS_DECLARE_CLASS()
-};
-
-Shader *ThinDielectric::createShader(Renderer *renderer) const {
-    return new ThinDielectricShader(renderer);
-}
-
-MTS_IMPLEMENT_CLASS(ThinDielectricShader, false, Shader)
 MTS_IMPLEMENT_CLASS_S(ThinDielectric, false, BSDF)
 MTS_EXPORT_PLUGIN(ThinDielectric, "Thin dielectric BSDF");
 MTS_NAMESPACE_END

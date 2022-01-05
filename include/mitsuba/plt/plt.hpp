@@ -15,7 +15,7 @@
 #include <mitsuba/render/shape.h>
 
 #include "mitsuba/core/constants.h"
-#include "mueller.h"
+#include "mueller.hpp"
 
 MTS_NAMESPACE_BEGIN
 
@@ -80,18 +80,37 @@ struct RadiancePacket {
     
     auto& L(std::size_t s) noexcept                 { return ls[s]; }
     const auto& S(std::size_t s) const noexcept     { return ls[s]; }
-    const auto Lx(std::size_t s) const noexcept     { return (S(s)[0]+S(s)[1]) / 2; }
-    const auto Ly(std::size_t s) const noexcept     { return (S(s)[0]-S(s)[1]) / 2; }
-    const auto Ldlp(std::size_t s) const noexcept   { return S(s)[2] / std::sqrt(Lx(s)*Ly(s)); }
-    const auto Lcp(std::size_t s) const noexcept    { return S(s)[3] / std::sqrt(Lx(s)*Ly(s)); }
+    const auto Lx(std::size_t s) const noexcept     { return std::max<Float>(0,S(s)[0]+S(s)[1]) / 2; }
+    const auto Ly(std::size_t s) const noexcept     { return std::max<Float>(0,S(s)[0]-S(s)[1]) / 2; }
+    const auto Ldlp(std::size_t s) const noexcept {
+        const auto l = std::sqrt(Lx(s)*Ly(s));
+        return l>RCPOVERFLOW ? S(s)[2] / l : .0f;
+    }
+    const auto Lcp(std::size_t s) const noexcept {
+        const auto l = std::sqrt(Lx(s)*Ly(s));
+        return l>RCPOVERFLOW ? S(s)[3] / l : .0f;
+    }
     const auto Sx(std::size_t s) const noexcept     { return Lx(s) * Vector4{ 1,1,0,0 }; }
     const auto Sy(std::size_t s) const noexcept     { return Ly(s) * Vector4{ 1,-1,0,0 }; }
     const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
+    
+    void setL(std::size_t s, Float Lx, Float Ly) noexcept {
+        const auto dlp = Ldlp(s);
+        const auto cp  = Lcp(s);
+        const auto sqrtLxLy = std::sqrt(Lx*Ly);
+        ls[s] = Vector4{ Lx+Ly,Lx-Ly,dlp*sqrtLxLy,cp*sqrtLxLy };
+    }
     
     // In microns^2
     // const auto coherenceArea_x(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_x.det()); }
     // const auto coherenceArea_y(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_y.det()); }
     const auto coherenceArea(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T.det()); }
+    const auto transverseMutualCoherence(Float k, const Vector2 &v) const noexcept {
+        Matrix2x2 invT;
+        (sqr(r/k) * this->T).invert(invT);
+        const auto x = dot(v,invT*v);
+        return std::exp(-.5f*x);
+    }
     
     // const auto Thetax(Float k, Float sigma_zz) const noexcept {
     //     const auto T = sqr(r/k) * T_x;

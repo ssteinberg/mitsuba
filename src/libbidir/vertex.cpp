@@ -16,7 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "mitsuba/plt/plt.h"
+#include "mitsuba/plt/plt.hpp"
 #include "mitsuba/render/common.h"
 #include <mitsuba/bidir/path.h>
 #include <mitsuba/core/statistics.h>

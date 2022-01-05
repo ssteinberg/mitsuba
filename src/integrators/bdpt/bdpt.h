@@ -21,7 +21,7 @@
 
 #include <mitsuba/mitsuba.h>
 
-#include <mitsuba/plt/plt.h>
+#include <mitsuba/plt/plt.hpp>
 
 /**
  * When the following is set to "1", the Bidirectional Path Tracer

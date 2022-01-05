@@ -1,13 +1,14 @@
 Import('env', 'plugins')
 
-# Basic library of smooth and rough materials
+# Stuff that works with PLT
 plugins += env.SharedLibrary('diffuse', ['diffuse.cpp'])
-# plugins += env.SharedLibrary('dielectric', ['dielectric.cpp'])
-# plugins += env.SharedLibrary('conductor', ['conductor.cpp'])
-# plugins += env.SharedLibrary('plastic', ['plastic.cpp'])
-# plugins += env.SharedLibrary('roughdiffuse', ['roughdiffuse.cpp'])
 plugins += env.SharedLibrary('dielectric', ['roughdielectric.cpp'])
 plugins += env.SharedLibrary('conductor', ['roughconductor.cpp'])
+plugins += env.SharedLibrary('thindielectric', ['thindielectric.cpp'])
+
+# Basic library of smooth and rough materials
+# plugins += env.SharedLibrary('plastic', ['plastic.cpp'])
+# plugins += env.SharedLibrary('roughdiffuse', ['roughdiffuse.cpp'])
 # plugins += env.SharedLibrary('roughplastic', ['roughplastic.cpp'])
 
 # Materials that act as modifiers
@@ -26,7 +27,6 @@ plugins += env.SharedLibrary('conductor', ['roughconductor.cpp'])
 # plugins += env.SharedLibrary('difftrans', ['difftrans.cpp'])
 # plugins += env.SharedLibrary('hk', ['hk.cpp'])
 # plugins += env.SharedLibrary('null', ['null.cpp'])
-# plugins += env.SharedLibrary('thindielectric', ['thindielectric.cpp'])
 
 # The Irawan-Marschner plugin uses a Boost::Spirit parser, which makes it
 # pretty heavy stuff to compile. Go easy on the compiler flags:
