@@ -6,6 +6,10 @@ plugins += env.SharedLibrary('dielectric', ['roughdielectric.cpp'])
 plugins += env.SharedLibrary('conductor', ['roughconductor.cpp'])
 plugins += env.SharedLibrary('thindielectric', ['thindielectric.cpp'])
 plugins += env.SharedLibrary('grating', ['grating.cpp'])
+plugins += env.SharedLibrary('clearcoat', ['clearcoat.cpp'])
+
+plugins += env.SharedLibrary('bumpmap', ['bumpmap.cpp'])
+plugins += env.SharedLibrary('normalmap', ['normalmap.cpp'])
 
 # Basic library of smooth and rough materials
 # plugins += env.SharedLibrary('plastic', ['plastic.cpp'])
@@ -17,10 +21,7 @@ plugins += env.SharedLibrary('grating', ['grating.cpp'])
 # plugins += env.SharedLibrary('mask', ['mask.cpp'])
 # plugins += env.SharedLibrary('mixturebsdf', ['mixturebsdf.cpp'])
 # plugins += env.SharedLibrary('blendbsdf', ['blendbsdf.cpp'])
-# plugins += env.SharedLibrary('coating', ['coating.cpp'])
 # plugins += env.SharedLibrary('roughcoating', ['roughcoating.cpp'])
-# plugins += env.SharedLibrary('bumpmap', ['bumpmap.cpp'])
-# plugins += env.SharedLibrary('normalmap', ['normalmap.cpp'])
 
 # Other materials
 # plugins += env.SharedLibrary('ward', ['ward.cpp'])

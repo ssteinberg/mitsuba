@@ -240,7 +240,7 @@ public:
                        MuellerFresnelDielectric(dot(bRec.wi,m), m_eta, isReflection) :
                        MuellerFresnelDielectric(Frame::cosTheta(bRec.wi), m_eta, isReflection);
         
-        const auto& in = rpp.spectrum();
+        const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             auto L = m00[idx] * ((Matrix4x4)M * rpp.S(idx));

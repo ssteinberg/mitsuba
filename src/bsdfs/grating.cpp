@@ -26,7 +26,9 @@
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/vector.h>
 #include <mitsuba/core/warp.h>
+#include <mitsuba/plt/plt.hpp>
 #include <mitsuba/plt/mueller.hpp>
+#include <mitsuba/plt/gaussianSurface.hpp>
 #include <mitsuba/render/sampler.h>
 #include <mitsuba/render/shape.h>
 #include <mitsuba/core/constants.h>
@@ -63,6 +65,8 @@ public:
         m_eta = props.getSpectrum("eta", intEta) / extEta;
         m_k   = props.getSpectrum("k", intK) / extEta;
 
+        m_q = new ConstantFloatTexture(props.getFloat("q", .0f));
+
         // Grating paramters
         std::vector<std::string> lobes = tokenize(props.getString("lobes", ""), " ,;");
         if (lobes.size() == 0)      Log(EError, "No lobes were supplied!");
@@ -81,6 +85,7 @@ public:
 
     Grating(Stream *stream, InstanceManager *manager)
      : BSDF(stream, manager) {
+        m_q = static_cast<Texture *>(manager->getInstance(stream));
         m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
         m_eta = Spectrum(stream);
         m_k = Spectrum(stream);
@@ -96,6 +101,7 @@ public:
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
+        manager->serialize(stream, m_q.get());
         manager->serialize(stream, m_specularReflectance.get());
         m_eta.serialize(stream);
         m_k.serialize(stream);
@@ -108,12 +114,13 @@ public:
 
     void configure() {
         unsigned int extraFlags = 0;
-        if (!m_specularReflectance->isConstant())
+        unsigned int extraFlagsScattered = 0;
+        if (!m_q->isConstant() || !m_specularReflectance->isConstant())
             extraFlags |= ESpatiallyVarying;
 
         m_components.clear();
         m_components.push_back(EDirectReflection | EFrontSide | extraFlags);
-        m_components.push_back(EScatteredReflection | EFrontSide | extraFlags);
+        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlags | extraFlagsScattered);
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
@@ -121,13 +128,18 @@ public:
         
         if (m_lobes.size() == 0)
             Log(EError, "No lobes were supplied!");
+        
+        // Poorly approximated fit to some grating geometries, should be done much better.
+        m_sigma2 = m_pitch/10.f;
 
         BSDF::configure();
     }
 
     void addChild(const std::string &name, ConfigurableObject *child) {
         if (child->getClass()->derivesFrom(MTS_CLASS(Texture))) {
-            if (name == "specularReflectance")
+            if (name == "q")
+                m_q = static_cast<Texture *>(child);
+            else if (name == "specularReflectance")
                 m_specularReflectance = static_cast<Texture *>(child);
             else
                 BSDF::addChild(name, child);
@@ -161,7 +173,7 @@ public:
             if (p2<-M_PI) p2+=2*M_PI;
             const auto eff = sqr(2 * INV_PI / Float(l+1)); // Lobe diffraction efficiency
 
-            // convolve the Dirac lobs with the light's coherence
+            // Convolve the Dirac lobs with the light's coherence
             const auto cs = rpp.coherenceLength(k, rpp.f.toLocal(ppworld), 
                                                 pltCtx.sigma_zz * 1e+6f);   // in micron
             const auto dist = boost::math::normal{ Float(0), cs };
@@ -173,7 +185,6 @@ public:
 
         return ret / norm;
     }
-    
     
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         const auto hasDirect = (bRec.typeMask & EDirectReflection)
@@ -190,14 +201,22 @@ public:
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto F = fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
+        const auto q = m_q->eval(bRec.its).average();
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        
+        if (!hasDirect && a.average()==1)
+            return Spectrum(.0f);
         
         if (hasDirect) {
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
-                return F * m00;
+                return a * m00 *
+                    fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
         }
         if (hasScattered) {
-            return Frame::cosTheta(bRec.wo) * F * m00;
+            const auto m = normalize(bRec.wo+bRec.wi);
+            return (Spectrum(1.f)-a) * m00 * 
+                    gaussianSurface::envelopeScattered(m_sigma2, *bRec.pltCtx, bRec.wo + bRec.wi) *
+                    fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
         return Spectrum(.0f);
     }
@@ -219,8 +238,13 @@ public:
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
+        const auto q = m_q->eval(bRec.its).average();
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto m = normalize(bRec.wo+bRec.wi);
         const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
         
+        if (!hasDirect && a.average() >= 1-Epsilon)
+            return Spectrum(.0f);
         if (hasDirect && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon)
             return Spectrum(.0f);
         
@@ -245,7 +269,7 @@ public:
             D = diffract(bRec.wi, bRec.wo, its, rpp, *bRec.pltCtx, lt);
         }
         
-        const auto& in = rpp.spectrum();
+        const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             // Mueller Fresnel pBSDF
@@ -276,8 +300,10 @@ public:
         Assert(!!bRec.pltCtx);
 
         Float probDirect = hasDirect ? 1.0f : 0.0f;
-        if (hasDirect && hasScattered)
-            probDirect = m_specularSamplingWeight;
+        if (hasDirect && hasScattered) {
+            const auto q = m_q->eval(bRec.its).average();
+            probDirect = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
+        }
 
         if (hasDirect && measure == EDiscrete) {
             /* Check if the provided direction pair matches an ideal
@@ -285,7 +311,8 @@ public:
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return probDirect;
         } else if (hasScattered && measure == ESolidAngle && probDirect<1) {
-            return (1-probDirect) * warp::squareToCosineHemispherePdf(bRec.wo);
+            return /* Frame::cosTheta(bRec.wo) */ 
+                gaussianSurface::scatteredPdf(m_sigma2, *bRec.pltCtx, bRec.wi, bRec.wo) * (1-probDirect);
         }
 
         return 0.0f;
@@ -303,44 +330,64 @@ public:
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto F = fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
+        const auto q = m_q->eval(bRec.its).average();
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
 
         bRec.eta = 1.0f;
         if (hasScattered && hasDirect) {
-            const auto probDirect = m_specularSamplingWeight;
+            const auto probDirect = a.average();
 
             if (probDirect==1 || sample.x < probDirect) {
                 bRec.sampledComponent = 0;
                 bRec.sampledType = EDirectReflection;
                 bRec.wo = reflect(bRec.wi);
 
-                return 1.f/probDirect * F * m00;
+                return 1.f/probDirect * a * m00 *
+                    fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
             } else {
                 bRec.sampledComponent = 1;
                 bRec.sampledType = EScatteredReflection;
-                bRec.wo = warp::squareToCosineHemisphere(sample);
+                bRec.wo = gaussianSurface::sampleScattered(m_sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
 
-                return 1.f/(1-probDirect) * F * m00;
+                const auto pdf = (1-probDirect) * gaussianSurface::scatteredPdf(m_sigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+                if (pdf <= RCPOVERFLOW)
+                    return Spectrum(.0f);
+
+                const auto m = normalize(bRec.wo+bRec.wi);
+                return (1.f/pdf) * (Spectrum(1.f)-a) * m00 *
+                    fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
             }
         } else if (hasDirect) {
             bRec.sampledComponent = 0;
             bRec.sampledType = EDirectReflection;
             bRec.wo = reflect(bRec.wi);
+            return a * m00 *
+                fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
         } else {
             bRec.sampledComponent = 1;
             bRec.sampledType = EScatteredReflection;
-            bRec.wo = warp::squareToCosineHemisphere(sample);
+            bRec.wo = gaussianSurface::sampleScattered(m_sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+
+            const auto pdf = gaussianSurface::scatteredPdf(m_sigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+            if (pdf <= RCPOVERFLOW)
+                return Spectrum(.0f);
+
+            const auto m = normalize(bRec.wo+bRec.wi);
+            return (1.f/pdf) * (Spectrum(1.f)-a) * m00 *
+                fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
-        return F * m00;
     }
 
     std::string toString() const {
         std::ostringstream oss;
         oss << "Grating[" << endl
             << "  id = \"" << getID() << "\"," << endl
+            << "  q = " << indent(m_q->toString()) << "," << endl
             << "  specularReflectance = " << indent(m_specularReflectance->toString()) << "," << endl
             << "  eta = " << m_eta.toString() << "," << endl
             << "  k = " << m_k.toString() << endl
+            << "  grating pitch = " << std::to_string(m_pitch) << endl
+            << "  grating lobes count = " << std::to_string(m_lobes.size()) << endl
             << "]";
         return oss.str();
     }
@@ -348,12 +395,14 @@ public:
     MTS_DECLARE_CLASS()
 private:
     std::vector<Float> m_lobes;
-    Float m_pitch,m_specularSamplingWeight;
+    Float m_pitch,m_sigma2,m_specularSamplingWeight;
+
     ref<Texture> m_specularReflectance;
+    ref<Texture> m_q;
     Spectrum m_eta, m_k;
 };
 
 
 MTS_IMPLEMENT_CLASS_S(Grating, false, BSDF)
-MTS_EXPORT_PLUGIN(Grating, "Rough conductor BRDF");
+MTS_EXPORT_PLUGIN(Grating, "Rough grated surface BRDF");
 MTS_NAMESPACE_END

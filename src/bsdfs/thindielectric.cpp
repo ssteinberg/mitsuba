@@ -260,7 +260,7 @@ public:
                 return Spectrum(0.0f);
         }
         
-        const auto& in = radPac.spectrum();
+        const auto in = radPac.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<radPac.size(); ++idx) {
             const auto k = Spectrum::ks()[idx];

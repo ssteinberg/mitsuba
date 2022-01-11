@@ -65,8 +65,6 @@ public:
         for (int i=0; i<m_nested->getComponentCount(); ++i)
             m_components.push_back(m_nested->getType(i) | ESpatiallyVarying | EAnisotropic);
 
-        m_usesRayDifferentials = true;
-
         BSDF::configure();
     }
 
@@ -164,7 +162,7 @@ public:
         dv.t = cross(dv.n, s) + cross(worldN, dv.s);
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
+    Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         const Intersection& its = bRec.its;
         Intersection perturbed(its);
         perturbed.shFrame = getFrame(its);
@@ -179,8 +177,30 @@ public:
         perturbedQuery.sampler = bRec.sampler;
         perturbedQuery.typeMask = bRec.typeMask;
         perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
 
-        return m_nested->eval(perturbedQuery, measure);
+        return m_nested->envelope(perturbedQuery, eta, measure);
+    }
+
+    Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
+                  RadiancePacket &rpp, EMeasure measure) const { 
+        const Intersection& its = bRec.its;
+        Intersection perturbed(its);
+        perturbed.shFrame = getFrame(its);
+
+        BSDFSamplingRecord perturbedQuery(perturbed,
+            perturbed.toLocal(its.toWorld(bRec.wi)),
+            perturbed.toLocal(its.toWorld(bRec.wo)), bRec.mode);
+
+        if (Frame::cosTheta(bRec.wo) * Frame::cosTheta(perturbedQuery.wo) <= 0)
+            return Spectrum(0.0f);
+
+        perturbedQuery.sampler = bRec.sampler;
+        perturbedQuery.typeMask = bRec.typeMask;
+        perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
+
+        return m_nested->eval(perturbedQuery, eta, rpp, measure);
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
@@ -197,6 +217,7 @@ public:
         perturbedQuery.sampler = bRec.sampler;
         perturbedQuery.typeMask = bRec.typeMask;
         perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
         return m_nested->pdf(perturbedQuery, measure);
     }
 
@@ -210,6 +231,7 @@ public:
         perturbedQuery.sampler = bRec.sampler;
         perturbedQuery.typeMask = bRec.typeMask;
         perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
         Spectrum result = m_nested->sample(perturbedQuery, sample);
         if (!result.isZero()) {
             bRec.sampledComponent = perturbedQuery.sampledComponent;
@@ -220,33 +242,6 @@ public:
                 return Spectrum(0.0f);
         }
         return result;
-    }
-
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        const Intersection& its = bRec.its;
-        Intersection perturbed(its);
-        perturbed.shFrame = getFrame(its);
-
-        BSDFSamplingRecord perturbedQuery(perturbed, bRec.sampler, bRec.mode);
-        perturbedQuery.wi = perturbed.toLocal(its.toWorld(bRec.wi));
-        perturbedQuery.typeMask = bRec.typeMask;
-        perturbedQuery.component = bRec.component;
-        Spectrum result = m_nested->sample(perturbedQuery, pdf, sample);
-
-        if (!result.isZero()) {
-            bRec.sampledComponent = perturbedQuery.sampledComponent;
-            bRec.sampledType = perturbedQuery.sampledType;
-            bRec.wo = its.toLocal(perturbed.toWorld(perturbedQuery.wo));
-            bRec.eta = perturbedQuery.eta;
-            if (Frame::cosTheta(bRec.wo) * Frame::cosTheta(perturbedQuery.wo) <= 0)
-                return Spectrum(0.0f);
-        }
-
-        return result;
-    }
-
-    Float getRoughness(const Intersection &its, int component) const {
-        return m_nested->getRoughness(its, component);
     }
 
     std::string toString() const {
@@ -267,71 +262,6 @@ protected:
     ref<BSDF> m_nested;
 };
 
-// ================ Hardware shader implementation ================
-
-/**
- * This is a quite approximate version of the normal map model -- it likely
- * won't match the reference exactly, but it should be good enough for
- * preview purposes
- */
-class NormalMapShader : public Shader {
-public:
-    NormalMapShader(Renderer *renderer, const BSDF *nested, const Texture *normals)
-        : Shader(renderer, EBSDFShader), m_nested(nested), m_normals(normals) {
-        m_nestedShader = renderer->registerShaderForResource(m_nested.get());
-        m_normalShader = renderer->registerShaderForResource(m_normals.get());
-    }
-
-    bool isComplete() const {
-        return m_nestedShader.get() != NULL;
-    }
-
-    void cleanup(Renderer *renderer) {
-        renderer->unregisterShaderForResource(m_nested.get());
-        renderer->unregisterShaderForResource(m_normals.get());
-    }
-
-    void putDependencies(std::vector<Shader *> &deps) {
-        deps.push_back(m_nestedShader.get());
-        deps.push_back(m_normalShader.get());
-    }
-
-    void generateCode(std::ostringstream &oss,
-            const std::string &evalName,
-            const std::vector<std::string> &depNames) const {
-        oss << "vec3 " << evalName << "(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    vec3 n = normalize(2.0*" << depNames[1] << "(uv) - vec3(1.0));" << endl
-            << "    vec3 s = normalize(vec3(1.0-n.x*n.x, -n.x*n.y, -n.x*n.z)); " << endl
-            << "    vec3 t = cross(s, n);" << endl
-            << "    wi = vec3(dot(wi, s), dot(wi, t), dot(wi, n));" << endl
-            << "    wo = vec3(dot(wo, s), dot(wo, t), dot(wo, n));" << endl
-            << "    return " << depNames[0] << "(uv, wi, wo);" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "_diffuse(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    vec3 n = normalize(2.0*" << depNames[1] << "(uv) - vec3(1.0));" << endl
-            << "    vec3 s = normalize(vec3(1.0-n.x*n.x, -n.x*n.y, -n.x*n.z)); " << endl
-            << "    vec3 t = cross(s, n);" << endl
-            << "    wi = vec3(dot(wi, s), dot(wi, t), dot(wi, n));" << endl
-            << "    wo = vec3(dot(wo, s), dot(wo, t), dot(wo, n));" << endl
-            << "    return " << depNames[0] << "_diffuse(uv, wi, wo);" << endl
-            << "}" << endl
-            << endl;
-    }
-
-    MTS_DECLARE_CLASS()
-private:
-    ref<const BSDF> m_nested;
-    ref<const Texture> m_normals;
-    ref<Shader> m_nestedShader;
-    ref<Shader> m_normalShader;
-};
-
-Shader *NormalMap::createShader(Renderer *renderer) const {
-    return new NormalMapShader(renderer, m_nested.get(), m_normals.get());
-}
-
-MTS_IMPLEMENT_CLASS(NormalMapShader, false, Shader)
 MTS_IMPLEMENT_CLASS_S(NormalMap, false, BSDF)
 MTS_EXPORT_PLUGIN(NormalMap, "Normal map modifier");
 MTS_NAMESPACE_END

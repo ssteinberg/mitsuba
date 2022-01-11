@@ -133,7 +133,7 @@ public:
         const auto M = Float(1);
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         
-        const auto& in = rpp.spectrum();
+        const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             rpp.L(idx) = costheta_o * m00[idx] * M * rpp.S(idx);

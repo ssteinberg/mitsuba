@@ -199,7 +199,7 @@ public:
         // Rotate to sp-frame first
         rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
         
-        const auto& in = rpp.spectrum();
+        const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             // Mueller Fresnel pBSDF

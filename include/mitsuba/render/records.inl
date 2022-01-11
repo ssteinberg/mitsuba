@@ -67,7 +67,10 @@ inline const BSDF *Intersection::getBSDF() const {
 }
 
 inline const BSDF *Intersection::getBSDF(const RayDifferential &ray) {
-    return shape->getBSDF();
+    const auto bsdf = shape->getBSDF();
+    if (bsdf && !hasUVPartials)
+        computePartials(ray);
+    return bsdf;
 }
 
 inline bool Intersection::isMediumTransition() const {
