@@ -350,6 +350,10 @@ public:
     /** \brief Configure the object (called \a once after construction
        and addition of all child \ref ConfigurableObject instances). */
     virtual void configure();
+    
+
+    auto isPolarizing() const { return m_polarizer; }
+    const auto& getPolarizationDirection() const { return m_polarizer; }
 
     //! @}
     // =============================================================
@@ -372,6 +376,9 @@ protected:
     Float m_shutterOpen;
     Float m_shutterOpenTime;
     Float m_aspect;
+    
+    bool m_polarizer{ false };
+    Float m_polarizationDir;
 };
 
 /**

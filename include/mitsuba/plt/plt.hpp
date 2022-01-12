@@ -20,7 +20,7 @@
 MTS_NAMESPACE_BEGIN
 
 struct PLTContext {
-    Float Omega, A, sigma_zz;
+    Float sigma_zz;
 };
 
 struct RadiancePacket {
@@ -42,10 +42,27 @@ struct RadiancePacket {
         // T_y.setZero();
         T.setZero();
     }
+
+    inline RadiancePacket(Spectrum emission, const Float c, const Float r = 0) {
+        for (auto i=0;i<SPECTRUM_SAMPLES;++i) 
+            ls[i] = Vector4{ emission[i],0,0,0 };
+        // rad.T_x = rad.T_y = Matrix2x2(c,0,0,c);
+        T = Matrix2x2(c,0,0,c);
+        this->r = r;
+    }
+
     inline RadiancePacket(RadiancePacket&& o) noexcept = default;
     inline RadiancePacket(const RadiancePacket& o) noexcept = default;
     inline RadiancePacket& operator=(RadiancePacket&& o) noexcept = default;
     inline RadiancePacket& operator=(const RadiancePacket& o) noexcept = default;
+    
+    const auto begin() const noexcept { return ls.begin(); }
+    const auto end() const noexcept { return ls.end(); }
+    auto begin() noexcept { return ls.begin(); }
+    auto end() noexcept { return ls.end(); }
+    const auto size() const noexcept { return ls.size(); }
+    const auto& operator[](std::size_t idx) const noexcept { return ls[idx]; }
+    auto& operator[](std::size_t idx) noexcept { return ls[idx]; }
 
     inline void rotateShapeMatrices(Float costheta2, Float sintheta2) noexcept {
         // auto x = costheta2*T_x + sintheta2*T_y;
@@ -76,6 +93,15 @@ struct RadiancePacket {
     }
     inline void setFrame(const Vector &dir) noexcept {
         this->f = Frame{ dir };
+    }
+    
+    void polarize(const Vector3 &dir) noexcept {
+        const auto& d = f.toLocal(dir);
+        const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
+        for (auto &l : *this) {
+            l = (Matrix4x4)P * l;
+            l[0] = std::max(.0f, l[0]);
+        }
     }
     
     auto& L(std::size_t s) noexcept                 { return ls[s]; }
@@ -174,7 +200,11 @@ struct RadiancePacket {
     // Returns the spatial coherence variance in direction v
     const auto coherenceLength(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
         const auto &invT = invTheta(k, sigma_zz);
-        return dot(v,(Matrix3x3)invT*v);
+        return 2*Float(3)/dot(v,(Matrix3x3)invT*v);
+    }
+    const auto coherenceSigma2(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
+        const auto &invT = invTheta(k, sigma_zz);
+        return Float(1)/dot(v,(Matrix3x3)invT*v);
     }
     const auto mutualCoherence(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
         const auto &invT = invTheta(k, sigma_zz);
@@ -188,29 +218,9 @@ struct RadiancePacket {
         return std::exp(-.5f*x);
     }
     
-    const auto begin() const noexcept { return ls.begin(); }
-    const auto end() const noexcept { return ls.end(); }
-    auto begin() noexcept { return ls.begin(); }
-    auto end() noexcept { return ls.end(); }
-    const auto size() const noexcept { return ls.size(); }
-    const auto& operator[](std::size_t idx) const noexcept { return ls[idx]; }
-    auto& operator[](std::size_t idx) noexcept { return ls[idx]; }
-    
     bool isValid() const noexcept { return T.m[0][0]>0 && T.m[1][1]>0; }
     // bool isValid() const noexcept { return T_x.m[0][0]>0 && T_x.m[1][1]>0 &&
     //                                        T_y.m[0][0]>0 && T_y.m[1][1]>0; }
 };
-
-inline auto sourceLight(Spectrum emission, const PLTContext &ctx) {
-    RadiancePacket rad{};
-    for (auto i=0;i<SPECTRUM_SAMPLES;++i) 
-        rad.ls[i] = Vector4{ emission[i],0,0,0 };
-    const auto c = 2 * M_PI * ctx.Omega/ctx.A;
-    // rad.T_x = rad.T_y = Matrix2x2(c,0,0,c);
-    rad.T = Matrix2x2(c,0,0,c);
-    rad.r = 0;
-    
-    return rad;
-}
 
 MTS_NAMESPACE_END

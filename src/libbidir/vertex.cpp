@@ -18,6 +18,7 @@
 
 #include "mitsuba/plt/plt.hpp"
 #include "mitsuba/render/common.h"
+#include "mitsuba/render/sensor.h"
 #include <mitsuba/bidir/path.h>
 #include <mitsuba/core/statistics.h>
 
@@ -1041,7 +1042,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 pRec.measure = measure;
                 importanceResult = emitter->evalPosition(pRec);
 
-                *rpp = sourceLight(importanceResult, pltCtx);
+                *rpp = emitter->sourceLight();
             }
             break;
 
@@ -1089,6 +1090,12 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 if (measure != EDiscrete && dp != 0) {
                     importanceResult /= dp;
                     radianceResult /= dp;
+                }
+                
+                // Handle polarization
+                if (sensor->isPolarizing()) {
+                    const Transform &trafo = sensor->getWorldTransform()->eval(pRec.time);
+                    rpp->polarize(trafo((Vector)sensor->getPolarizationDirection()));
                 }
             }
             break;

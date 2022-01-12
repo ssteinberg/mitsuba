@@ -25,6 +25,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/core/cobject.h>
 #include <mitsuba/render/shader.h>
+#include <mitsuba/plt/plt.hpp>
 
 MTS_NAMESPACE_BEGIN
 
@@ -397,6 +398,12 @@ public:
 
     /// Serialize this emitter to a binary data stream
     virtual void serialize(Stream *stream, InstanceManager *manager) const;
+    
+
+    virtual RadiancePacket sourceLight() const {
+        Assert(false && "Not implemneted");
+    }
+
 
     //! @}
     // =============================================================

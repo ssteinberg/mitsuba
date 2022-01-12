@@ -238,14 +238,14 @@ public:
                      1/std::abs(Frame::cosTheta(bRecInt.wo)))).exp();
             /* Solid angle compression & irradiance conversion factors */
             if (measure == ESolidAngle)
-                terms *= m_invEta * m_invEta *
+                terms *= //m_invEta * m_invEta *
                     Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
             
             Spectrum result = Spectrum(.0f);
             for (std::size_t idx=0; idx<rpp.size(); ++idx) {
                 auto L = terms[idx] * rpp.S(idx);
                 if (in[idx]>RCPOVERFLOW)
-                    result[idx] *= L[0] / in[idx];
+                    result[idx] = L[0] / in[idx];
                 rpp.L(idx) = L;
             }
 
