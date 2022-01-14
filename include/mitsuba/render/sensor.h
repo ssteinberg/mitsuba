@@ -353,7 +353,9 @@ public:
     
 
     auto isPolarizing() const { return m_polarizer; }
-    const auto& getPolarizationDirection() const { return m_polarizer; }
+    const Vector3 getPolarizationDirection() const { 
+        return { std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 };
+    }
 
     //! @}
     // =============================================================

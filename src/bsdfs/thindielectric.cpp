@@ -102,7 +102,7 @@ public:
             extraFlags |= ESpatiallyVarying;
         m_components.clear();
         m_components.push_back(EDirectReflection | EFrontSide | EBackSide | extraFlags);
-        m_components.push_back(EDirectTransmission | EFrontSide | EBackSide | extraFlags);
+        m_components.push_back(ENull | EFrontSide | EBackSide | extraFlags);
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
@@ -157,22 +157,22 @@ public:
 
         // Fresnel coefficients
         float rss, rsp, tso, tse, rps, rpp, tpo, tpe;
-        // float r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep;
+        float r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep;
         float roo, roe, tos, top, reo, ree, tes, tep;
         birefringence::fresnel_iso_aniso(I.y,I.z, ei,eo,ee, A,  rss, rsp, tso, tse, rps, rpp, tpo, tpe);
-        // birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A,  r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep);
+        birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A,  r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep);
         birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A2, roo, roe, tos, top, reo, ree, tes, tep);
         
         // Offsets
         const float Ioz =  std::abs(tau / Io.y)  * Io.z;
         const float Iez =  std::abs(tau / Ie.y)  * Ie.z;
-        // const float Ioz2 = std::abs(tau / Io2.y) * Io2.z;
-        // const float Iez2 = std::abs(tau / Ie2.y) * Ie2.z;
+        const float Ioz2 = std::abs(tau / Io2.y) * Io2.z;
+        const float Iez2 = std::abs(tau / Ie2.y) * Ie2.z;
         // OPLs
         const float OPLo =  std::abs(tau / Io.y)  * eo;
         const float OPLe =  std::abs(tau / Ie.y)  * e_eff;
-        // const float OPLo2 = std::abs(tau / Io2.y) * eo;
-        // const float OPLe2 = std::abs(tau / Ie2.y) * e_eff2;
+        const float OPLo2 = std::abs(tau / Io2.y) * eo;
+        const float OPLe2 = std::abs(tau / Ie2.y) * e_eff2;
 
         const auto sqrtLxLy = std::sqrt(Lx*Ly);
         if (!refl) {
@@ -189,7 +189,17 @@ public:
             Lx = nLx;
         }
         else {
-            Assert(false && "Not implemented!");
+            const auto ss = tso*(roo*t2os + roe*t2es) + tse*(reo*tos + ree*tes);
+            const auto sp = tso*(roo*t2op + roe*t2ep) + tse*(reo*top + ree*tep);
+            const auto ps = tpo*(roo*t2os + roe*t2es) + tpe*(reo*tos + ree*tes);
+            const auto pp = tpo*(roo*t2op + roe*t2ep) + tpe*(reo*top + ree*tep);
+            const auto oez = std::abs(Ioz+Ioz2-Iez-Iez2);
+            const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
+            const auto t = mutual_coh * std::sin(-k*(ei*oez*I.z+OPLo+OPLo2-OPLe-OPLe2));    // Interference term, modulated by mutual coherence
+
+            const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + 2*ss*ps*t*sqrtLxLy);
+            Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
+            Lx = nLx;
         }
     }
 
@@ -203,7 +213,7 @@ public:
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
-        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
+        bool sampleTransmission = (bRec.typeMask & ENull)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
  
         Assert(!!bRec.pltCtx);
@@ -229,7 +239,7 @@ public:
                   RadiancePacket &radPac, EMeasure measure) const { 
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
-        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
+        bool sampleTransmission = (bRec.typeMask & ENull)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
         const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) >= 0;
 
@@ -264,25 +274,22 @@ public:
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<radPac.size(); ++idx) {
             const auto k = Spectrum::ks()[idx];
-            if (isReflection) {
-                const auto& M = R.m[0][0]<1-Epsilon ? (Matrix4x4)(R + T * R * invOneMinusR * T) : R;
-                radPac.L(idx) = m00[idx] * (M * radPac.S(idx));
+            const auto B = m_birefringence->eval(bRec.its).average();
+            if (B!=.0f) {
+                auto Lx = m00[idx] * radPac.Lx(idx);
+                auto Ly = m00[idx] * radPac.Ly(idx);
+                handle_birefringence(Lx, Ly, radPac, *bRec.pltCtx, bRec.its, B, bRec.wi, k, isReflection);
+
+                radPac.setL(idx, Lx, Ly);
             }
             else {
-                // Transmission effects
-                const auto B = m_birefringence->eval(bRec.its).average();
-                if (B!=.0f) {
-                    auto Lx = radPac.Lx(idx);
-                    auto Ly = radPac.Ly(idx);
-                    handle_birefringence(Lx, Ly, radPac, *bRec.pltCtx, bRec.its, B, bRec.wi, k, false);
+                const auto& M = isReflection ? 
+                    (R.m[0][0]<1-Epsilon ? (Matrix4x4)(R + T * R * invOneMinusR * T) : R) :
+                    (R.m[0][0]<1-Epsilon ? (Matrix4x4)(T * invOneMinusR * T) : T);
+                radPac.L(idx) = m00[idx] * (M * radPac.S(idx));
+            }
 
-                    radPac.setL(idx, Lx, Ly);
-                }
-                else {
-                    const auto& M = R.m[0][0]<1-Epsilon ? (Matrix4x4)(T * invOneMinusR * T) : T;
-                    radPac.L(idx) = m00[idx] * (M * radPac.S(idx));
-                }
-
+            if (!isReflection) {
                 // Polarizer
                 if (m_polarizer) {
                     const auto& d = radPac.f.toLocal(BSDF::getFrame(bRec.its).toWorld(
@@ -304,7 +311,7 @@ public:
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
-        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
+        bool sampleTransmission = (bRec.typeMask & ENull)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
 
         Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
@@ -327,7 +334,7 @@ public:
     Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0);
-        bool sampleTransmission = (bRec.typeMask & EDirectTransmission)
+        bool sampleTransmission = (bRec.typeMask & ENull)
                 && (bRec.component == -1 || bRec.component == 1);
 
         Float R = fresnelDielectricExt(Frame::cosTheta(bRec.wi), m_eta), T = 1-R;

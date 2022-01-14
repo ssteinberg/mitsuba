@@ -167,7 +167,7 @@ public:
 
             /* Solid angle compression & irradiance conversion factors */
             if (measure == ESolidAngle)
-                result *= m_invEta * m_invEta *
+                result *= sqr(m_invEta) *
                     Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
 
             return result;
@@ -238,7 +238,7 @@ public:
                      1/std::abs(Frame::cosTheta(bRecInt.wo)))).exp();
             /* Solid angle compression & irradiance conversion factors */
             if (measure == ESolidAngle)
-                terms *= //m_invEta * m_invEta *
+                terms *= sqr(m_invEta) *
                     Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
             
             Spectrum result = Spectrum(.0f);
@@ -284,7 +284,7 @@ public:
             Float pdf = m_nested->pdf(bRecInt, measure);
 
             if (measure == ESolidAngle)
-                pdf *= m_invEta * m_invEta * Frame::cosTheta(bRec.wo)
+                pdf *= sqr(m_invEta) * Frame::cosTheta(bRec.wo)
                       / Frame::cosTheta(bRecInt.wo);
 
             return sampleSpecular ? (pdf * (1 - probSpecular)) : pdf;
@@ -321,11 +321,11 @@ public:
             }
         }
 
+        bRec.eta = 1.0f;
         if (choseSpecular) {
             bRec.sampledComponent = (int) m_components.size() - 1;
             bRec.sampledType = EDirectReflection;
             bRec.wo = reflect(bRec.wi);
-            bRec.eta = 1.0f;
             const auto pdf = sampleNested ? probSpecular : 1.0f;
             return m_specularReflectance->eval(bRec.its) * (R12/pdf);
         } else {

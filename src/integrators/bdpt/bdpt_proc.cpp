@@ -228,8 +228,17 @@ public:
                 // Propagate coherence information and update all weights
                 RadiancePacket rp = s>0 ? rps[s-1] : RadiancePacket{};
                 if (!vs->update(scene, vsPred, vt, 
-                                &rp, m_config.pltCtx, EImportance, &value) ||
-                    !vt->update(scene, vs, vtNext, 
+                                &rp, m_config.pltCtx, EImportance, &value))
+                    continue;
+
+                /* Attempt to connect the two endpoints, which could result in
+                   the creation of additional vertices (index-matched boundaries etc.) */
+                int interactions = m_config.maxDepth - s - t + 1;
+                if (!connectionEdge.pathConnectAndCollapse(
+                        scene, vsEdge, vs, vt, m_config.pltCtx, rp, vtEdge, interactions))
+                    continue;
+                    
+                if (!vt->update(scene, vs, vtNext, 
                                 &rp, m_config.pltCtx, ERadiance, &value))
                     continue;
 
@@ -239,13 +248,6 @@ public:
                     vs->measure = EArea;
                 if (!vt->isSensorSupernode())
                     vt->measure = EArea;
-
-                /* Attempt to connect the two endpoints, which could result in
-                   the creation of additional vertices (index-matched boundaries etc.) */
-                int interactions = m_config.maxDepth - s - t + 1;
-                if (!connectionEdge.pathConnectAndCollapse(
-                        scene, vsEdge, vs, vt, vtEdge, interactions))
-                    continue;
 
                 // Finish evaluating the chain
                 for (int tt = t-1; tt>=std::max(1,minT); --tt) {

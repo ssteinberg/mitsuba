@@ -17,6 +17,7 @@
 */
 
 #pragma once
+#include "mitsuba/plt/plt.hpp"
 #if !defined(__MITSUBA_BIDIR_EDGE_H_)
 #define __MITSUBA_BIDIR_EDGE_H_
 
@@ -408,6 +409,8 @@ struct MTS_EXPORT_BIDIR PathEdge {
      */
     bool pathConnectAndCollapse(const Scene *scene, const PathEdge *predEdge,
         const PathVertex *vs, const PathVertex *vt,
+        const PLTContext &pltctx,
+        RadiancePacket &rpp,
         const PathEdge *succEdge, int &interactions);
 
     /// Create a deep copy of this edge

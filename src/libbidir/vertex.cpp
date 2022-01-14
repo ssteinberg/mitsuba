@@ -1095,7 +1095,10 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 // Handle polarization
                 if (sensor->isPolarizing()) {
                     const Transform &trafo = sensor->getWorldTransform()->eval(pRec.time);
-                    rpp->polarize(trafo((Vector)sensor->getPolarizationDirection()));
+                    const auto &dir = trafo(sensor->getPolarizationDirection());
+                    const auto polres = rpp->polarize(dir);
+
+                    radianceResult *= importanceResult *= polres;
                 }
             }
             break;

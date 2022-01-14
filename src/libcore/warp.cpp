@@ -140,7 +140,7 @@ Float squareToStdNormalPdf(const Point2 &pos) {
 }
 
 Vector squareToTruncatedGaussian(Float stddev, const Point2 &mean, Sampler &sampler) {
-    constexpr auto attempts = 666ull;
+    constexpr auto attempts = 1000ull;
     for (auto i=0ull; i<attempts; ++i) {
         const auto& p = squareToStdNormal(sampler.next2D())*stddev + mean;
         const auto l = sqr(p.x)+sqr(p.y);

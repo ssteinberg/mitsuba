@@ -441,6 +441,8 @@ bool PathEdge::pathConnect(const Scene *scene, const PathEdge *predEdge,
 
 bool PathEdge::pathConnectAndCollapse(const Scene *scene, const PathEdge *predEdge,
         const PathVertex *vs, const PathVertex *vt,
+        const PLTContext &pltctx,
+        RadiancePacket &rpp,
         const PathEdge *succEdge, int &interactions) {
     if (vs->isEmitterSupernode() || vt->isSensorSupernode()) {
         Float radianceTransport   = vt->isSensorSupernode() ? 1.0f : 0.0f,
@@ -455,7 +457,7 @@ bool PathEdge::pathConnectAndCollapse(const Scene *scene, const PathEdge *predEd
         interactions = 0;
     } else {
         Point vsp = vs->getPosition(), vtp = vt->getPosition();
-        d = vsp-vtp;
+        d = vtp-vsp;
         length = d.length();
         int maxInteractions = interactions;
         interactions = 0;
@@ -469,8 +471,8 @@ bool PathEdge::pathConnectAndCollapse(const Scene *scene, const PathEdge *predEd
         }
 
         d /= length;
-        Float lengthFactor = vs->isOnSurface() ? (1-ShadowEpsilon) : 1;
-        Ray ray(vtp, d, vt->isOnSurface() ? Epsilon : 0, length * lengthFactor, vs->getTime());
+        Float lengthFactor = vt->isOnSurface() ? (1-ShadowEpsilon) : 1;
+        Ray ray(vsp, d, vs->isOnSurface() ? Epsilon : 0, length * lengthFactor, vs->getTime());
 
         weight[ERadiance] = Spectrum(1.0f);
         weight[EImportance] = Spectrum(1.0f);
@@ -479,7 +481,7 @@ bool PathEdge::pathConnectAndCollapse(const Scene *scene, const PathEdge *predEd
 
         Intersection its;
         Float remaining = length;
-        medium = vt->getTargetMedium(succEdge, d);
+        medium = vs->getTargetMedium(succEdge, d);
 
         while (true) {
             bool surface = scene->rayIntersectAll(ray, its);
@@ -523,13 +525,14 @@ bool PathEdge::pathConnectAndCollapse(const Scene *scene, const PathEdge *predEd
             /* Account for the ENull interaction */
             const BSDF *bsdf = its.getBSDF();
             Vector wo = its.toLocal(ray.d);
-            BSDFSamplingRecord bRec(its, -wo, wo, ERadiance);
+            BSDFSamplingRecord bRec(its, -wo, wo, EImportance);
             bRec.component = BSDF::ENull;
+            bRec.pltCtx = &pltctx;
             Float nullPdf = bsdf->pdf(bRec, EDiscrete);
             if (nullPdf == 0)
                 return false;
 
-            Spectrum nullWeight = bsdf->envelope(bRec, EDiscrete) / nullPdf;
+            Spectrum nullWeight = bsdf->eval(bRec, rpp, EDiscrete) / nullPdf;
 
             weight[EImportance] *= nullWeight;
             weight[ERadiance] *= nullWeight;
