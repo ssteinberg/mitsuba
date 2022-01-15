@@ -23,7 +23,7 @@ inline auto alpha(const Float costhetai, const Float q) {
 }
 
 auto envelopeScattered(Float sigma2, const PLTContext &pltCtx, const Vector3 &h) {
-    const auto sigma_min = pltCtx.sigma_zz * 1e+6f; // metres to micron
+    const auto sigma_min = pltCtx.sigma_min_um;
     const auto w = Float(1) / sigma_min + Float(1) / sigma2;
     
     const auto dist = boost::math::normal{ Float(0), w };
@@ -38,7 +38,7 @@ auto envelopeScattered(Float sigma2, const PLTContext &pltCtx, const Vector3 &h)
 }
 
 auto sampleScattered(Float sigma2, const PLTContext &pltCtx, const Vector3 &wi, Sampler &sampler) {
-    const auto sigma_min = pltCtx.sigma_zz * 1e+6f; // metres to micron
+    const auto sigma_min = pltCtx.sigma_min_um;
     const auto w = Float(1) / sigma_min + Float(1) / sigma2;
     const auto k = Spectrum::ks().average();
     
@@ -46,7 +46,7 @@ auto sampleScattered(Float sigma2, const PLTContext &pltCtx, const Vector3 &wi, 
 }
 
 auto scatteredPdf(Float sigma2, const PLTContext &pltCtx, const Vector3 &wi, const Vector3 &wo) {
-    const auto sigma_min = pltCtx.sigma_zz * 1e+6f; // metres to micron
+    const auto sigma_min = pltCtx.sigma_min_um;
     const auto w = Float(1) / sigma_min + Float(1) / sigma2;
     const auto k = Spectrum::ks().average();
     

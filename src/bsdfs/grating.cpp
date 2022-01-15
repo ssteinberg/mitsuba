@@ -122,7 +122,7 @@ public:
             extraFlags |= ESpatiallyVarying;
 
         m_components.clear();
-        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlags);
+        m_components.push_back(EDirectReflection | EFrontSide | EUsesSampler | extraFlags);
         m_components.push_back(EDirectReflection | EFrontSide | extraFlags);
 
         /* Verify the input parameters and fix them if necessary */
@@ -219,10 +219,10 @@ public:
     }
     
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
-        const auto hasDC = (bRec.typeMask & EScatteredReflection) 
+        const auto hasDC = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component == 0);
         const auto hasLobes = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component > 0) && measure == EDiscrete;
+        && (bRec.component == -1 || bRec.component > 0) && measure == EDiscrete;
         if ((!hasDC && !hasLobes) 
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
@@ -232,7 +232,7 @@ public:
         const auto m00 = m_specularReflectance->eval(bRec.its) 
                             * fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
         const auto &x = gratingX(bRec.its);
-        const auto sigma2 = bRec.pltCtx->sigma_zz * 1e+6f;
+        const auto sigma2 = bRec.pltCtx->sigma_min_um;
 
         Spectrum result(.0f);
         if (hasDC) {
@@ -250,7 +250,7 @@ public:
 
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
                   RadiancePacket &rpp, EMeasure measure) const { 
-        const auto hasDC = (bRec.typeMask & EScatteredReflection) 
+        const auto hasDC = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component == 0);
         const auto hasLobes = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component > 0) && measure == EDiscrete;
@@ -311,7 +311,7 @@ public:
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        const auto hasDC = (bRec.typeMask & EScatteredReflection) 
+        const auto hasDC = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component == 0);
         const auto hasLobes = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component > 0);
@@ -337,7 +337,7 @@ public:
     }
 
     Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        const auto hasDC = (bRec.typeMask & EScatteredReflection) 
+        const auto hasDC = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component == 0);
         const auto hasLobes = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component > 0);
@@ -354,7 +354,7 @@ public:
         if (hasDC && hasLobes) {
             if (sample.x < m_q) {
                 bRec.sampledComponent = 0;
-                bRec.sampledType = EScatteredReflection;
+                bRec.sampledType = EDirectReflection;
                 bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
                 
                 const auto pdf = m_q * gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
@@ -372,7 +372,7 @@ public:
             }
         } else if (hasDC) {
             bRec.sampledComponent = 0;
-            bRec.sampledType = EScatteredReflection;
+            bRec.sampledType = EDirectReflection;
             bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
             
             const auto pdf = gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);

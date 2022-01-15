@@ -20,7 +20,7 @@
 MTS_NAMESPACE_BEGIN
 
 struct PLTContext {
-    Float sigma_zz;
+    Float sigma_zz, sigma_min_um;
 };
 
 struct RadiancePacket {
@@ -125,6 +125,10 @@ struct RadiancePacket {
     const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
     
     void setL(std::size_t s, Float Lx, Float Ly) noexcept {
+        if (Lx+Ly<=0) {
+            ls[s] = { 0,0,0,0 };
+            return;
+        }
         const auto dlp = Ldlp(s);
         const auto cp  = Lcp(s);
         const auto sqrtLxLy = std::sqrt(Lx*Ly);
@@ -202,13 +206,12 @@ struct RadiancePacket {
     // const auto coherenceArea_y(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T_y.det()); }
     const auto coherenceArea(Float k) const noexcept { return M_PI * sqr(r/k) * std::sqrt(T.det()); }
     // Returns the spatial coherence variance in direction v
-    const auto coherenceLength(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
-        const auto &invT = invTheta(k, sigma_zz);
-        return 2*Float(3)/dot(v,(Matrix3x3)invT*v);
-    }
     const auto coherenceSigma2(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
         const auto &invT = invTheta(k, sigma_zz);
         return Float(1)/dot(v,(Matrix3x3)invT*v);
+    }
+    const auto coherenceLength(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
+        return 3*std::sqrt(coherenceSigma2(k, v, sigma_zz));
     }
     const auto mutualCoherence(Float k, const Vector3 &v, Float sigma_zz) const noexcept {
         const auto &invT = invTheta(k, sigma_zz);

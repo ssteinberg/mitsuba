@@ -63,6 +63,7 @@ struct BDPTConfiguration {
         cropSize = Vector2i(stream);
         rrDepth = stream->readInt();
         pltCtx.sigma_zz = stream->readFloat();
+        pltCtx.sigma_min_um = stream->readFloat();
     }
 
     inline void serialize(Stream *stream) const {
@@ -75,6 +76,7 @@ struct BDPTConfiguration {
         cropSize.serialize(stream);
         stream->writeInt(rrDepth);
         stream->writeFloat(pltCtx.sigma_zz);
+        stream->writeFloat(pltCtx.sigma_min_um);
     }
 
     void dump() const {
@@ -89,7 +91,7 @@ struct BDPTConfiguration {
         SLog(EDebug, "   Russian roulette depth      : %i", rrDepth);
         SLog(EDebug, "   Block size                  : %i", blockSize);
         SLog(EDebug, "   Number of samples           : " SIZE_T_FMT, sampleCount);
-        SLog(EDebug, "   PLT --- sigma_zz            : %d, %d, %d", pltCtx.sigma_zz);
+        SLog(EDebug, "   PLT --- sigma_zz, sigmax_min_um : %d, %d", pltCtx.sigma_zz, pltCtx.sigma_min_um);
         #if BDPT_DEBUG == 1
             SLog(EDebug, "   Show weighted contributions : %s", showWeighted ? "yes" : "no");
         #endif

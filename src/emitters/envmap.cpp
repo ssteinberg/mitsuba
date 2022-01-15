@@ -186,6 +186,9 @@ public:
 
         /* Scale factor */
         m_scale = props.getFloat("scale", 1.0f);
+        
+        m_distance = props.getFloat("distance", 1.496e+11);
+        m_lightArea = props.getFloat("source_area", 15e+17);
     }
 
     EnvironmentMap(Stream *stream, InstanceManager *manager) : Emitter(stream, manager),
@@ -427,6 +430,12 @@ public:
 
     Float pdfPosition(const PositionSamplingRecord &pRec) const {
         return m_invSurfaceArea;
+    }
+    
+    virtual RadiancePacket sourceLight() const override {
+        // VCZ theorem
+        const Float coh0 = sqr(2*M_PI) / m_lightArea;
+        return RadiancePacket{ Spectrum(m_power * m_invSurfaceArea), coh0, m_distance };
     }
 
     /**
@@ -673,6 +682,8 @@ private:
     BSphere m_sceneBSphere;
     Vector2i m_size;
     Vector2 m_pixelSize;
+    
+    Float m_distance, m_lightArea;
 };
 
 // ================ Hardware shader implementation ================

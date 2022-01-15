@@ -198,6 +198,7 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                 pdf[1-mode] = bsdf->pdf(bRec, (EMeasure) measure);
                 if (pdf[1-mode] <= RCPOVERFLOW) {
                     /* This can happen rarely due to roundoff errors -- be strict */
+                    // SLog(EWarn, "Reverse PDF is zero.");
                     return false;
                 }
 
@@ -1073,6 +1074,8 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 }
 
                 rpp->setFrame(wo);
+                for (auto idx=0ull;idx<rpp->size();++idx)
+                    (*rpp)[idx] *= importanceResult[idx];
             }
             break;
 

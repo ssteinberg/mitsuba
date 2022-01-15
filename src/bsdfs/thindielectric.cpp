@@ -22,9 +22,11 @@
 #include <mitsuba/core/constants.h>
 #include "ior.h"
 #include "mitsuba/core/math.h"
+#include "mitsuba/render/common.h"
 
 #include <mitsuba/plt/plt.hpp>
 #include <mitsuba/plt/birefringence.hpp>
+#include <mitsuba/plt/gaussianSurface.hpp>
 
 MTS_NAMESPACE_BEGIN
 
@@ -60,10 +62,15 @@ public:
             props.getSpectrum("specularReflectance", Spectrum(1.0f)));
         m_specularTransmittance = new ConstantSpectrumTexture(
             props.getSpectrum("specularTransmittance", Spectrum(1.0f)));
+
+        m_q = new ConstantFloatTexture(props.getFloat("q", .0f));
+        m_sigma2 = new ConstantFloatTexture(props.getFloat("sigma2", .0f));
     }
 
     ThinDielectric(Stream *stream, InstanceManager *manager)
             : BSDF(stream, manager) {
+        m_q = static_cast<Texture *>(manager->getInstance(stream));
+        m_sigma2 = static_cast<Texture *>(manager->getInstance(stream));
         m_eta = stream->readFloat();
         m_etai = stream->readFloat();
         m_etao = stream->readFloat();
@@ -82,6 +89,8 @@ public:
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
+        manager->serialize(stream, m_q.get());
+        manager->serialize(stream, m_sigma2.get());
         stream->writeFloat(m_eta);
         stream->writeFloat(m_etai);
         stream->writeFloat(m_etao);
@@ -98,11 +107,18 @@ public:
 
     void configure() {
         unsigned int extraFlags = 0;
+        unsigned int extraFlagsScattered = 0;
+        if (!m_q->isConstant() || !m_specularReflectance->isConstant())
+            extraFlags |= ESpatiallyVarying;
         if (!m_specularReflectance->isConstant() || !m_specularTransmittance->isConstant())
             extraFlags |= ESpatiallyVarying;
         m_components.clear();
         m_components.push_back(EDirectReflection | EFrontSide | EBackSide | extraFlags);
         m_components.push_back(ENull | EFrontSide | EBackSide | extraFlags);
+        m_components.push_back(EScatteredReflection | EFrontSide | EBackSide | 
+                               EUsesSampler | extraFlags | extraFlagsScattered);
+        m_components.push_back(EScatteredTransmission | EFrontSide | EBackSide | 
+                               EUsesSampler | extraFlags | extraFlagsScattered);
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
@@ -115,7 +131,11 @@ public:
 
     void addChild(const std::string &name, ConfigurableObject *child) {
         if (child->getClass()->derivesFrom(MTS_CLASS(Texture))) {
-            if (name == "specularReflectance")
+            if (name == "q")
+                m_q = static_cast<Texture *>(child);
+            else if (name == "sigma2")
+                m_sigma2 = static_cast<Texture *>(child);
+            else if (name == "specularReflectance")
                 m_specularReflectance = static_cast<Texture *>(child);
             else if (name == "specularTransmittance")
                 m_specularTransmittance = static_cast<Texture *>(child);
@@ -146,7 +166,7 @@ public:
 
         const float ei = m_etai;
         const float eo = m_etao;
-        const float ee = eo + birefringence*.2f;
+        const float ee = eo + birefringence;
         const auto tau = m_tau->eval(its).average() * 1e+6f; // in micron
         
         // Downwards and upwards propagating ordinary and extraordinary vectors in the slab
@@ -157,22 +177,22 @@ public:
 
         // Fresnel coefficients
         float rss, rsp, tso, tse, rps, rpp, tpo, tpe;
-        float r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep;
+        // float r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep;
         float roo, roe, tos, top, reo, ree, tes, tep;
         birefringence::fresnel_iso_aniso(I.y,I.z, ei,eo,ee, A,  rss, rsp, tso, tse, rps, rpp, tpo, tpe);
-        birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A,  r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep);
+        // birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A,  r2oo, r2oe, t2os, t2op, r2eo, r2ee, t2es, t2ep);
         birefringence::fresnel_aniso_iso(I.y,I.z, ei,eo,ee, A2, roo, roe, tos, top, reo, ree, tes, tep);
         
         // Offsets
         const float Ioz =  std::abs(tau / Io.y)  * Io.z;
         const float Iez =  std::abs(tau / Ie.y)  * Ie.z;
-        const float Ioz2 = std::abs(tau / Io2.y) * Io2.z;
-        const float Iez2 = std::abs(tau / Ie2.y) * Ie2.z;
+        // const float Ioz2 = std::abs(tau / Io2.y) * Io2.z;
+        // const float Iez2 = std::abs(tau / Ie2.y) * Ie2.z;
         // OPLs
         const float OPLo =  std::abs(tau / Io.y)  * eo;
         const float OPLe =  std::abs(tau / Ie.y)  * e_eff;
-        const float OPLo2 = std::abs(tau / Io2.y) * eo;
-        const float OPLe2 = std::abs(tau / Ie2.y) * e_eff2;
+        // const float OPLo2 = std::abs(tau / Io2.y) * eo;
+        // const float OPLe2 = std::abs(tau / Ie2.y) * e_eff2;
 
         const auto sqrtLxLy = std::sqrt(Lx*Ly);
         if (!refl) {
@@ -188,19 +208,6 @@ public:
             Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
             Lx = nLx;
         }
-        else {
-            const auto ss = tso*(roo*t2os + roe*t2es) + tse*(reo*tos + ree*tes);
-            const auto sp = tso*(roo*t2op + roe*t2ep) + tse*(reo*top + ree*tep);
-            const auto ps = tpo*(roo*t2os + roe*t2es) + tpe*(reo*tos + ree*tes);
-            const auto pp = tpo*(roo*t2op + roe*t2ep) + tpe*(reo*top + ree*tep);
-            const auto oez = std::abs(Ioz+Ioz2-Iez-Iez2);
-            const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
-            const auto t = mutual_coh * std::sin(-k*(ei*oez*I.z+OPLo+OPLo2-OPLe-OPLe2));    // Interference term, modulated by mutual coherence
-
-            const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + 2*ss*ps*t*sqrtLxLy);
-            Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
-            Lx = nLx;
-        }
     }
 
     inline Vector reflect(const Vector &wi) const {
@@ -209,171 +216,357 @@ public:
     inline Vector transmit(const Vector &wi) const {
         return -wi;
     }
+    inline Vector scattered_wo(const Vector &wo) const {
+        return -reflect(wo);
+    }
     
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
         bool sampleTransmission = (bRec.typeMask & ENull)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
- 
+        bool hasScattered = (bRec.typeMask & EScattered)
+                && (bRec.component == -1 || bRec.component == 2 || bRec.component == 3)
+                && measure == ESolidAngle;
+        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) > 0;
+        
+        if (!isReflection || std::abs(dot(reflect(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
+            sampleReflection = false;
+        if (isReflection || std::abs(dot(transmit(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
+            sampleTransmission = false;
+        if (sampleReflection || sampleTransmission)
+            hasScattered = false;
+
+        if ((!hasScattered && !sampleReflection && !sampleTransmission) 
+             || Frame::cosTheta(bRec.wi) == 0)
+            return Spectrum(0.0f);
+
+        const auto q = m_q->eval(bRec.its).average();
+        const auto sigma2 = m_sigma2->eval(bRec.its).average();
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
+                                        m_specularTransmittance->eval(bRec.its);
+
         Assert(!!bRec.pltCtx);
 
-        Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
-        if (R < 1)
-            R += T*T * R / (1-R*R);
+        if (sampleReflection || sampleTransmission) {
+            Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
+            if (R < 1)
+                R += T*T * R / (1-R*R);
 
-        if (Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) >= 0) {
-            if (!sampleReflection || std::abs(dot(reflect(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
-                return Spectrum(0.0f);
-
-            return m_specularReflectance->eval(bRec.its) * R;
-        } else {
-            if (!sampleTransmission || std::abs(dot(transmit(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
-                return Spectrum(0.0f);
-
-            return m_specularTransmittance->eval(bRec.its) * (1 - R);
+            if (isReflection)
+                return a * m00 * R;
+            else
+                return a * m00 * (1 - R);
         }
+        else if (hasScattered) {
+            const auto costheta_o = std::fabs(Frame::cosTheta(bRec.wo));
+            const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
+
+            const auto h = bRec.wi + wo;
+            const auto m = normalize(h);
+            Float R = fresnelDielectricExt(std::abs(dot(bRec.wi,m)),m_eta), T = 1-R;
+            if (R < 1)
+                R += T*T * R / (1-R*R);
+
+            return costheta_o * (isReflection ? R : 1-R) *
+                    (Spectrum(1.f)-a) * m00 * 
+                    gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, h);
+        }
+        
+        return Spectrum(.0f);
     }
 
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
-                  RadiancePacket &radPac, EMeasure measure) const { 
+                  RadiancePacket &rpp, EMeasure measure) const { 
         bool sampleReflection   = (bRec.typeMask & EDirectReflection)
                 && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
         bool sampleTransmission = (bRec.typeMask & ENull)
                 && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
-        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) >= 0;
+        bool hasScattered = (bRec.typeMask & EScattered)
+                && (bRec.component == -1 || bRec.component == 2 || bRec.component == 3)
+                && measure == ESolidAngle;
+        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) > 0;
 
-        if ((!sampleReflection && isReflection) || (!sampleTransmission && !isReflection) 
+        if (!isReflection || std::abs(dot(reflect(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
+            sampleReflection = false;
+        if (isReflection || std::abs(dot(transmit(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
+            sampleTransmission = false;
+        if (sampleReflection || sampleTransmission)
+            hasScattered = false;
+
+        if ((!hasScattered && !sampleReflection && !sampleTransmission) 
              || Frame::cosTheta(bRec.wi) == 0)
             return Spectrum(0.0f);
         
-        Assert(bRec.mode==EImportance && radPac.isValid());
+        Assert(bRec.mode==EImportance && rpp.isValid());
         Assert(!!bRec.pltCtx);
         
         // Rotate to sp-frame first
-        radPac.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
-
+        const auto fi = rpp.f;
+        Matrix3x3 Q = Matrix3x3(bRec.its.toLocal(fi.s),
+                                bRec.its.toLocal(fi.t),
+                                bRec.its.toLocal(fi.n)), Qt;
+        Q.transpose(Qt);
+        
+        // Rotate to sp-frame first
+        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+        
+        const auto q = m_q->eval(bRec.its).average();
+        const auto sigma2 = m_sigma2->eval(bRec.its).average();
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                         m_specularTransmittance->eval(bRec.its);
+
+        const auto B = m_birefringence->eval(bRec.its).average();
         
-        const auto costheta_i = std::abs(Frame::cosTheta(bRec.wi));
-        const auto R = MuellerFresnelRDielectric(costheta_i, m_eta),
-                   invOneMinusR = invOneMinusMuellerFresnelRDielectric(costheta_i, m_eta),
-                   T = MuellerFresnelTDielectric(costheta_i, m_eta);
-        
-        Matrix4x4 M;
-        if (isReflection) {
-            if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
-                return Spectrum(0.0f);
-        } else {
-            if (std::abs(dot(transmit(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
-                return Spectrum(0.0f);
+        Float D = 1, costheta_i;
+        if (!hasScattered) {
+            costheta_i = std::abs(Frame::cosTheta(bRec.wi));
+        }
+        else {
+            const auto k = Spectrum::ks().average();
+            const auto& wo = isReflection ? bRec.wo : -reflect(bRec.wo);
+            const auto h = bRec.wi + wo;
+            const auto m = normalize(h);
+            const auto costheta_o = std::abs(Frame::cosTheta(bRec.wo));
+
+            D = costheta_o * 
+                gaussianSurface::diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+                                          sigma2, Q,Qt, k*h);
+            costheta_i = std::abs(dot(bRec.wi,m));
         }
         
-        const auto in = radPac.spectrum();
+        Matrix4x4 M;
+        {
+            const auto R = MuellerFresnelRDielectric(costheta_i, m_eta),
+                internalRs = invOneMinusMuellerFresnelRDielectric(costheta_i, m_eta),
+                T = MuellerFresnelTDielectric(costheta_i, m_eta);
+            M = isReflection ? 
+                    (internalRs.m[0][0]>0 ? (Matrix4x4)(R + T * R * internalRs * T) : (Matrix4x4)R) :
+                    (internalRs.m[0][0]>0 ? (Matrix4x4)(T * internalRs * T)         : (Matrix4x4)(T*T));
+        }
+        
+        const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
-        for (std::size_t idx=0; idx<radPac.size(); ++idx) {
+        for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             const auto k = Spectrum::ks()[idx];
-            const auto B = m_birefringence->eval(bRec.its).average();
-            if (B!=.0f) {
-                auto Lx = m00[idx] * radPac.Lx(idx);
-                auto Ly = m00[idx] * radPac.Ly(idx);
-                handle_birefringence(Lx, Ly, radPac, *bRec.pltCtx, bRec.its, B, bRec.wi, k, isReflection);
+            if (B!=.0f && !isReflection) {
+                auto Lx = rpp.Lx(idx);
+                auto Ly = rpp.Ly(idx);
+                handle_birefringence(Lx, Ly, rpp, *bRec.pltCtx, bRec.its, B, bRec.wi, k, isReflection);
 
-                radPac.setL(idx, Lx, Ly);
+                rpp.setL(idx, Lx, Ly);
             }
             else {
-                const auto& M = isReflection ? 
-                    (R.m[0][0]<1-Epsilon ? (Matrix4x4)(R + T * R * invOneMinusR * T) : R) :
-                    (R.m[0][0]<1-Epsilon ? (Matrix4x4)(T * invOneMinusR * T) : T);
-                radPac.L(idx) = m00[idx] * (M * radPac.S(idx));
+                rpp.L(idx) = (M * rpp.S(idx));
             }
+            
+            rpp.L(idx) = D * m00[idx] * (hasScattered ? 1-a : a) * rpp.S(idx);
 
             if (!isReflection) {
                 // Polarizer
                 if (m_polarizer) {
-                    const auto& d = radPac.f.toLocal(BSDF::getFrame(bRec.its).toWorld(
+                    const auto& d = rpp.f.toLocal(BSDF::getFrame(bRec.its).toWorld(
                         { std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 }));
                     const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
-                    auto L = (Matrix4x4)P * radPac.S(idx);
+                    auto L = (Matrix4x4)P * rpp.S(idx);
                     L[0] = std::max(.0f, L[0]);
-                    radPac.L(idx) = L;
+                    rpp.L(idx) = L;
                 }
             }
+            
+            if (rpp.L(idx)[0]<=0)
+                rpp.L(idx) = {0,0,0,0};
 
             if (in[idx]>RCPOVERFLOW)
-                result[idx] = radPac.S(idx)[0] / in[idx];
+                result[idx] = rpp.S(idx)[0] / in[idx];
         }
 
         return result;
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        bool sampleReflection   = (bRec.typeMask & EDirectReflection)
-                && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
-        bool sampleTransmission = (bRec.typeMask & ENull)
-                && (bRec.component == -1 || bRec.component == 1) && measure == EDiscrete;
+        const auto hasDirect = (bRec.typeMask & EDelta)
+                && (bRec.component == -1 || bRec.component == 0 || bRec.component == 1);
+        const auto hasScattered = (bRec.typeMask & EScattered)
+                && (bRec.component == -1 || bRec.component == 2 || bRec.component == 3);
+        const auto hasReflection = (bRec.typeMask & EReflection)
+                && (bRec.component == -1 || bRec.component == 0 || bRec.component == 2);
+        const auto hasTransmission = (bRec.typeMask & ETransmission)
+                && (bRec.component == -1 || bRec.component == 1 || bRec.component == 3);
+        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) > 0;
 
-        Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)), m_eta), T = 1-R;
-        if (R < 1)
-            R += T*T * R / (1-R*R);
+        if (Frame::cosTheta(bRec.wi) == 0 || (!hasReflection && !hasTransmission) || (!hasDirect && !hasScattered) 
+                || (isReflection && !hasReflection)|| (!isReflection && !hasTransmission))
+            return .0f;
 
-        if (Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) >= 0) {
-            if (!sampleReflection || std::abs(dot(reflect(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
-                return 0.0f;
+        Assert(!!bRec.pltCtx);
 
-            return sampleTransmission ? R : 1.0f;
-        } else {
-            if (!sampleTransmission || std::abs(dot(transmit(bRec.wi), bRec.wo)-1) > DeltaEpsilon)
-                return 0.0f;
-
-            return sampleReflection ? 1-R : 1.0f;
+        Float probDirect = hasDirect ? 1.f : .0f;
+        if (hasDirect && hasScattered) {
+            const auto q = m_q->eval(bRec.its).average();
+            probDirect = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
         }
+
+        if (hasDirect && measure == EDiscrete) {
+            Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)),m_eta), T = 1-R;
+            if (R < 1)
+                R += T*T * R / (1-R*R);
+
+            Float F = 1.f;
+            if (hasReflection && hasTransmission)
+                F = isReflection ? R : 1-R;
+
+            if ((isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) <= DeltaEpsilon) ||
+                (!isReflection && std::abs(dot(transmit(bRec.wi), bRec.wo)-1) <= DeltaEpsilon))
+                return F * probDirect;
+        }
+        if (hasScattered && measure == ESolidAngle && probDirect<1) {
+            const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
+            if (wo.z == 0)
+                return 0;
+            const auto sigma2 = m_sigma2->eval(bRec.its).average();
+            const auto h = bRec.wi + wo;
+            const auto m = normalize(h);
+            
+            auto R = fresnelDielectricExt(std::abs(dot(bRec.wi,m)),m_eta), T = 1-R;
+            if (R < 1)
+                R += T*T * R / (1-R*R);
+
+            Float F = 1.f;
+            if (hasReflection && hasTransmission)
+                F = isReflection ? R : 1.f-R;
+            
+            return gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo) * 
+                F * (1-probDirect);
+        }
+
+        return 0;
     }
 
     Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        bool sampleReflection   = (bRec.typeMask & EDirectReflection)
-                && (bRec.component == -1 || bRec.component == 0);
-        bool sampleTransmission = (bRec.typeMask & ENull)
-                && (bRec.component == -1 || bRec.component == 1);
+        const auto hasDirect = (bRec.typeMask & EDelta)
+                && (bRec.component == -1 || bRec.component == 0 || bRec.component == 1);
+        const auto hasScattered = (bRec.typeMask & EScattered)
+                && (bRec.component == -1 || bRec.component == 2 || bRec.component == 3);
+        const auto hasReflection = (bRec.typeMask & EReflection)
+                && (bRec.component == -1 || bRec.component == 0 || bRec.component == 2);
+        const auto hasTransmission = (bRec.typeMask & ETransmission)
+                && (bRec.component == -1 || bRec.component == 1 || bRec.component == 3);
 
-        Float R = fresnelDielectricExt(Frame::cosTheta(bRec.wi), m_eta), T = 1-R;
+        if (Frame::cosTheta(bRec.wi) == 0 || (!hasReflection && !hasTransmission)
+             || (!hasDirect && !hasScattered))
+            return Spectrum(.0f);
+
+        Assert(!!bRec.pltCtx);
+        
+        Float R = fresnelDielectricExt(std::abs(Frame::cosTheta(bRec.wi)),m_eta), T=1-R;
         if (R < 1)
             R += T*T * R / (1-R*R);
-
-        if (sampleTransmission && sampleReflection) {
-            if (sample.x <= R) {
-                bRec.sampledComponent = 0;
-                bRec.sampledType = EDirectReflection;
-                bRec.wo = reflect(bRec.wi);
-                bRec.eta = 1.0f;
-
-                return m_specularReflectance->eval(bRec.its);
-            } else {
-                bRec.sampledComponent = 1;
-                bRec.sampledType = EDirectTransmission;
-                bRec.wo = transmit(bRec.wi);
-                bRec.eta = 1.0f;
-
-                return m_specularTransmittance->eval(bRec.its);
-            }
-        } else if (sampleReflection) {
-            bRec.sampledComponent = 0;
-            bRec.sampledType = EDirectReflection;
-            bRec.wo = reflect(bRec.wi);
-            bRec.eta = 1.0f;
-
-            return m_specularReflectance->eval(bRec.its) * R;
-        } else if (sampleTransmission) {
-            bRec.sampledComponent = 1;
-            bRec.sampledType = EDirectTransmission;
-            bRec.wo = transmit(bRec.wi);
-            bRec.eta = 1.0f;
-
-            return m_specularTransmittance->eval(bRec.its) * (1-R);
+        
+        const auto q = m_q->eval(bRec.its).average();
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto sigma2 = m_sigma2->eval(bRec.its).average();
+        
+        Vector3 wo;
+        
+        auto pdf = 1.f;
+        auto weight = Spectrum(1.f);
+        bool isDirect = hasDirect;
+        if (hasDirect && hasScattered) {
+            const auto pdfdirect = a.average();
+            isDirect = sample.x <= pdfdirect;
+            pdf *= isDirect ? pdfdirect : 1.f-pdfdirect;
         }
 
-        return Spectrum(0.0f);
+        bool isReflection = hasReflection;
+        if (hasReflection && hasTransmission) {
+            if (isDirect) {
+                isReflection =  sample.y <= R;
+                const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
+                                                m_specularTransmittance->eval(bRec.its);
+                
+                wo = isReflection ? reflect(bRec.wi) : transmit(bRec.wi);
+                weight *= a * m00;
+            }
+            else {
+                wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                if (wo.z*bRec.wi.z<.0f)
+                    wo.z *= -1.f;
+                pdf *= gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo);
+                
+                const auto h = bRec.wi + wo;
+                const auto m = normalize(h);
+                Float r = fresnelDielectricExt(std::abs(dot(bRec.wi,m)),m_eta), t=1-r;
+                if (r < 1)
+                    r += t*t * r / (1-r*r);
+
+                isReflection = sample.y <= r;
+                if (!isReflection)
+                    wo = scattered_wo(wo);
+                
+                const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
+                                                m_specularTransmittance->eval(bRec.its);
+                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00;
+            }
+        }
+        else if (hasReflection) {
+            const auto m00 = m_specularReflectance->eval(bRec.its);
+            if (isDirect) {
+                wo = reflect(bRec.wi);
+                weight *= a * m00 * R;
+            }
+            else {
+                wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                if (wo.z*bRec.wi.z<.0f)
+                    wo.z *= -1.f;
+                pdf *= gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo);
+
+                const auto h = bRec.wi + wo;
+                const auto m = normalize(h);
+                const auto r = fresnelDielectricExt(std::abs(dot(bRec.wi,m)),m_eta);
+                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00 * r;
+            }
+        }
+        else {
+            const auto m00 = m_specularTransmittance->eval(bRec.its);
+            if (isDirect) {
+                wo = transmit(bRec.wi);
+                weight *= a * m00 * (1-R);
+            }
+            else {
+                wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                if (wo.z*bRec.wi.z<.0f)
+                    wo.z *= -1.f;
+                pdf *= gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo);
+                
+                const auto h = bRec.wi + wo;
+                const auto m = normalize(h);
+                Float r = fresnelDielectricExt(std::abs(dot(bRec.wi,m)),m_eta), t=1-r;
+                if (r < 1)
+                    r += t*t * r / (1-r*r);
+                
+                wo = scattered_wo(wo);
+                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00 * (1-r);
+            }
+        }
+        
+        if (wo.z == 0 || pdf <= RCPOVERFLOW)
+            return Spectrum(.0f);
+
+        Assert((isReflection  && wo.z*bRec.wi.z>.0f) ||
+               (!isReflection && wo.z*bRec.wi.z<.0f));
+        
+        bRec.eta = 1.f;
+        bRec.sampledComponent =  isDirect &&  isReflection ? 0 :
+                                 isDirect && !isReflection ? 1 :
+                                !isDirect &&  isReflection ? 2 : 3;
+        bRec.sampledType =  isDirect &&  isReflection ? EDirectReflection :
+                            isDirect && !isReflection ? ENull :
+                           !isDirect &&  isReflection ? EScatteredReflection : EScatteredTransmission;
+        bRec.wo = wo;
+        return weight / pdf;
     }
 
     std::string toString() const {
@@ -394,6 +587,7 @@ private:
     ref<Texture> m_specularTransmittance;
     ref<Texture> m_specularReflectance;
     ref<Texture> m_birefringence, m_tau;
+    ref<Texture> m_q, m_sigma2;
     bool m_polarizer{ false };
     Float m_polarizationDir;
 };

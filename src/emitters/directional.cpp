@@ -200,8 +200,7 @@ public:
     
     virtual RadiancePacket sourceLight() const override {
         // VCZ theorem
-        const Float lambda0 = 0.5; // um
-        const Float coh0 = sqr(lambda0) / 2 * M_PI / m_lightArea;
+        const Float coh0 = sqr(2*M_PI) / m_lightArea;
         return RadiancePacket{ m_normalIrradiance, coh0, m_distance };
     }
 

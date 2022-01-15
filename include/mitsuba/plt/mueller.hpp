@@ -89,7 +89,6 @@ auto invOneMinusMuellerFresnel(const T &fs, const T &fp) noexcept {
     const auto minor2 = Matrix2x2(1,0,0,1) - Matrix2x2(m22,m23,-m23,m22);
     Matrix2x2 im1, im2;
     if (!minor1.invert(im1) || !minor2.invert(im2)) {
-        assert(false);
         Matrix4x4 z;
         z.setZero();
         return z;

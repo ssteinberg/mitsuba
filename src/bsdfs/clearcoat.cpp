@@ -167,7 +167,7 @@ public:
 
             /* Solid angle compression & irradiance conversion factors */
             if (measure == ESolidAngle)
-                result *= sqr(m_invEta) *
+                result *= //sqr(m_invEta) *
                     Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
 
             return result;
@@ -224,7 +224,7 @@ public:
                 // Rotate to the exitant frame
                 rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
                 // Refract out of the coat
-                const auto Tout = MuellerFresnelDielectric(Frame::cosTheta(bRecInt.wo), m_invEta, false);
+                const auto Tout = MuellerFresnelDielectric(Frame::cosTheta(-bRecInt.wo), m_eta, false);
                 for (std::size_t idx=0; idx<rpp.size(); ++idx)
                     rpp.L(idx) = (Matrix4x4)Tout * rpp.S(idx);
             }
@@ -238,7 +238,7 @@ public:
                      1/std::abs(Frame::cosTheta(bRecInt.wo)))).exp();
             /* Solid angle compression & irradiance conversion factors */
             if (measure == ESolidAngle)
-                terms *= sqr(m_invEta) *
+                terms *= //sqr(m_invEta) *
                     Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
             
             Spectrum result = Spectrum(.0f);
@@ -284,8 +284,8 @@ public:
             Float pdf = m_nested->pdf(bRecInt, measure);
 
             if (measure == ESolidAngle)
-                pdf *= sqr(m_invEta) * Frame::cosTheta(bRec.wo)
-                      / Frame::cosTheta(bRecInt.wo);
+                pdf *= //sqr(m_invEta) * 
+                    Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
 
             return sampleSpecular ? (pdf * (1 - probSpecular)) : pdf;
         } else {
@@ -333,7 +333,7 @@ public:
                 return Spectrum(0.0f);
 
             Vector wiBackup = bRec.wi;
-            bRec.wi = wiPrime;
+            // bRec.wi = wiPrime;
             Spectrum result = m_nested->sample(bRec, sample);
             bRec.wi = wiBackup;
             if (result.isZero())
