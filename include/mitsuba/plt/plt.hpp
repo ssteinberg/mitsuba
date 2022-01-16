@@ -20,7 +20,7 @@
 MTS_NAMESPACE_BEGIN
 
 struct PLTContext {
-    Float sigma_zz, sigma_min_um;
+    Float sigma_zz, sigma2_min_um;
 };
 
 struct RadiancePacket {
@@ -112,6 +112,10 @@ struct RadiancePacket {
     const auto& S(std::size_t s) const noexcept     { return ls[s]; }
     const auto Lx(std::size_t s) const noexcept     { return std::max<Float>(0,S(s)[0]+S(s)[1]) / 2; }
     const auto Ly(std::size_t s) const noexcept     { return std::max<Float>(0,S(s)[0]-S(s)[1]) / 2; }
+    const auto Llp(std::size_t s) const noexcept {
+        const auto l = ls[s][0];
+        return l>RCPOVERFLOW ? S(s)[1] / l : .0f;
+    }
     const auto Ldlp(std::size_t s) const noexcept {
         const auto l = std::sqrt(Lx(s)*Ly(s));
         return l>RCPOVERFLOW ? S(s)[2] / l : .0f;
@@ -124,6 +128,23 @@ struct RadiancePacket {
     const auto Sy(std::size_t s) const noexcept     { return Ly(s) * Vector4{ 1,-1,0,0 }; }
     const auto Sc(std::size_t s) const noexcept     { return Vector4{ 0,0,S(s)[2],S(s)[3] }; }
     
+    void setL(std::size_t s, Float L) noexcept {
+        if (L<=0) {
+            ls[s] = { 0,0,0,0 };
+            return;
+        }
+        const auto lp  = Llp(s);
+        const auto dlp = Ldlp(s);
+        const auto cp  = Lcp(s);
+        
+        ls[s][0] = L;
+        ls[s][1] = L*lp;
+        
+        const auto sqrtLxLy = std::sqrt(Lx(s)*Ly(s));
+        ls[s][2] = dlp*sqrtLxLy;
+        ls[s][3] = cp*sqrtLxLy;
+
+    }
     void setL(std::size_t s, Float Lx, Float Ly) noexcept {
         if (Lx+Ly<=0) {
             ls[s] = { 0,0,0,0 };
@@ -174,10 +195,13 @@ struct RadiancePacket {
     // } 
     const auto invTheta(Float k, Float sigma_zz) const noexcept {
         const auto T = sqr(r/k) * this->T;
-        return Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
+        Matrix3x3 ret = 
+            Float(1) / (T.m[0][0]*T.m[1][1] - sqr(T.m[0][1])) * 
             Matrix3x3( T.m[1][1], -T.m[0][1], 0,
                       -T.m[0][1],  T.m[0][0], 0,
-                       0,          0,         Float(1) / sigma_zz);
+                       0,          0,         0);
+        ret.m[2][2] = Float(1) / sigma_zz;
+        return ret;
     } 
     
     auto& operator*=(Float f) noexcept {

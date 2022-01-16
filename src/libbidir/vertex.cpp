@@ -1044,6 +1044,8 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 importanceResult = emitter->evalPosition(pRec);
 
                 *rpp = emitter->sourceLight();
+                for (auto idx=0ull;idx<rpp->size();++idx)
+                    rpp->setL(idx, importanceResult[idx]);
             }
             break;
 

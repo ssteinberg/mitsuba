@@ -200,7 +200,7 @@ public:
             const auto sp = tso*top + tse*tep;
             const auto ps = tpo*tos + tpe*tes;
             const auto pp = tpo*top + tpe*tep;
-            const auto oez = std::abs(Ioz-Iez);
+            const auto oez = std::abs(Ioz-Iez)/2;
             const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
             const auto t = mutual_coh * std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
 

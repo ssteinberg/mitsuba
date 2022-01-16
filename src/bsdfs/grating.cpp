@@ -79,7 +79,6 @@ public:
 
         m_pitch = props.getFloat("pitch");
         m_q = props.getFloat("q",0.5);
-        m_dcSigma2 = props.getFloat("dc_sigma2");
         m_gratingDirU = props.getBoolean("gratingInDirectionU", true);
     }
 
@@ -94,7 +93,6 @@ public:
             m_lobes[i] = stream->readFloat();
         m_pitch = stream->readFloat();
         m_q = stream->readFloat();
-        m_dcSigma2 = stream->readFloat();
         m_gratingDirU = stream->readBool();
 
         configure();
@@ -122,21 +120,19 @@ public:
             extraFlags |= ESpatiallyVarying;
 
         m_components.clear();
-        m_components.push_back(EDirectReflection | EFrontSide | EUsesSampler | extraFlags);
         m_components.push_back(EDirectReflection | EFrontSide | extraFlags);
+        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlags);
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
             m_specularReflectance, "specularReflectance", 1.0f);
-        
-        if (m_lobes.size() == 0)
-            Log(EError, "No lobes were supplied!");
         
         m_lobePhis.clear();
         m_lobeEff.clear();
         m_lobePhis.reserve(2*m_lobes.size()*SPECTRUM_SAMPLES);
         for (auto l=0ull;l<m_lobes.size();++l) {
             if (m_lobes[l]<=0) continue;
+
             for (int i=0;i<SPECTRUM_SAMPLES;++i) {
                 const auto phi = (l+1) * Spectrum::lambdas()[i] / m_pitch;
                 m_lobePhis.emplace_back(+phi);
@@ -144,13 +140,9 @@ public:
                 m_lobeEff.emplace_back(m_lobes[l]);
             }
         }
-        m_maxPhi = std::abs(m_lobePhis.back());
-        m_lobesPdf = 1/(2*m_maxPhi*180*INV_PI);
-
-        m_norm = {};
-        for (auto l=0ull;l<m_lobeEff.size();++l)
-            m_norm += 2*std::min<Float>(1,m_lobeEff[l]);
-        m_norm = 1/m_norm;
+        
+        if (m_lobeEff.size() == 0)
+            Log(EError, "No lobes were supplied!");
 
         BSDF::configure();
     }
@@ -172,26 +164,34 @@ public:
     
     Vector lobeMean(std::size_t comp, const Vector3 &dc_wo, const Vector2 &x) const noexcept {
         const auto phi  = m_lobePhis[comp];
-        const auto mean = TQuaternion<Float>::fromAxisAngle(Vector3{ x.x,x.y,0 }, phi * 180*INV_PI)
+        const auto mean = TQuaternion<Float>::fromAxisAngle(Vector3{ x.x,x.y,0 }, phi)
                         .toTransform()(dc_wo);
         return mean;
     }
-    Vector sampleLobe(const Vector3 &wi, const Vector2 &x, Float sample) const noexcept {
+    Vector sampleLobe(std::size_t comp, const Vector3 &wi, Float sigma2, 
+                      const Vector2 &x, const Point2 &sample) const noexcept {
+        const auto k    = lobek(comp);
+        const auto theta = warp::squareToStdNormal(sample).x / (k*std::sqrt(sigma2));
+        
         const auto &dc_wo = reflect(wi);
-        return TQuaternion<Float>::fromAxisAngle(Vector3{ x.x,x.y,0 }, 
-                                                 (sample*2-1) * m_maxPhi * 180*INV_PI)
-                    .toTransform()(dc_wo);
+        const auto phi  = m_lobePhis[comp];
+        return TQuaternion<Float>::fromAxisAngle(Vector3{ x.x,x.y,0 }, phi + theta)
+                        .toTransform()(dc_wo);
+
     }
-    Float evalLobe(std::size_t comp, Float sigma2, 
+    Float lobePdf(std::size_t comp, Float sigma2, 
                    const Vector3 &wi, const Vector3 &wo, const Vector2 &x) const noexcept {
         const auto &dc_wo = reflect(wi);
         const auto mean = lobeMean(comp, dc_wo, x);
         const auto k    = lobek(comp);
-        const auto angle_from_mean2 = 1-sqr(dot(mean,wo));  // sin x \approx x, for small x
+        
+        const auto n = normalize(cross(mean,dc_wo));
+        const auto w = normalize(wo - dot(wo,n)*wo);
+        const auto theta2 = 1-sqr(dot(w,mean));
 
-        const auto eval = std::exp(-.5f*angle_from_mean2*sigma2*sqr(k))
+        const auto eval = std::exp(-.5f * theta2 * sigma2*sqr(k))
                             * std::sqrt(sigma2/(2*M_PI))*k
-                            * m_lobesPdf;
+                            / (m_lobePhis.size());
         return eval;
     }
     
@@ -214,15 +214,15 @@ public:
     auto spectrum(int component) const noexcept {
         const auto spectral_bin = lobeSpectralBin(component);
         auto s = Spectrum(.0f);
-        s[spectral_bin] = m_lobeEff[component/(2*SPECTRUM_SAMPLES)] * m_norm;
+        s[spectral_bin] = m_lobeEff[component/(2*SPECTRUM_SAMPLES)] * SPECTRUM_SAMPLES;
         return s;
     }
     
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
         const auto hasDC = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component == 0);
-        const auto hasLobes = (bRec.typeMask & EDirectReflection) 
-        && (bRec.component == -1 || bRec.component > 0) && measure == EDiscrete;
+                && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
+        const auto hasLobes = (bRec.typeMask & EScatteredReflection) 
+                && (bRec.component == -1 || bRec.component > 0) && measure == ESolidAngle;
         if ((!hasDC && !hasLobes) 
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
@@ -232,16 +232,15 @@ public:
         const auto m00 = m_specularReflectance->eval(bRec.its) 
                             * fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
         const auto &x = gratingX(bRec.its);
-        const auto sigma2 = bRec.pltCtx->sigma_min_um;
+        const auto sigma2 = bRec.pltCtx->sigma2_min_um;
 
         Spectrum result(.0f);
         if (hasDC) {
-            result += m00 * 
-                    gaussianSurface::envelopeScattered(m_dcSigma2, *bRec.pltCtx, bRec.wo + bRec.wi);
-        }
-        if (hasLobes) {
+            result = m_q * m00;
+                    // gaussianSurface::envelopeScattered(m_dcSigma2, *bRec.pltCtx, bRec.wo + bRec.wi);
+        } else if (hasLobes) {
             for (auto comp=0;comp<(int)m_lobePhis.size();++comp)
-                result += evalLobe(comp, sigma2, bRec.wi, bRec.wo, x) * 
+                result += lobePdf(comp, sigma2, bRec.wi, bRec.wo, x) * 
                     (1-m_q) * m00 * spectrum(comp);
         }
         
@@ -251,9 +250,9 @@ public:
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
                   RadiancePacket &rpp, EMeasure measure) const { 
         const auto hasDC = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component == 0);
-        const auto hasLobes = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component > 0) && measure == EDiscrete;
+                && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
+        const auto hasLobes = (bRec.typeMask & EScatteredReflection) 
+                && (bRec.component == -1 || bRec.component > 0) && measure == ESolidAngle;
         if ((!hasDC && !hasLobes) 
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
@@ -263,24 +262,19 @@ public:
         const auto m00 = m_specularReflectance->eval(bRec.its);
         const auto &xw = rpp.f.toLocal(gratingXworld(bRec.its));
         const auto &x  = gratingX(bRec.its);
-        const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
 
         Spectrum lobes(.0f);
         if (hasLobes) {
             for (auto comp=0;comp<(int)m_lobePhis.size();++comp) {
                 const auto spec = spectrum(comp);
-                const auto k = comp>0 ? Spectrum::ks()[lobeSpectralBin(comp)] : Spectrum::ks().average();
+                const auto k = Spectrum::ks()[lobeSpectralBin(comp)];
 
                 const auto light_coh_sigma2 = 2*rpp.coherenceSigma2(k, xw, bRec.pltCtx->sigma_zz * 1e+6f);
-                lobes += evalLobe(comp, light_coh_sigma2, bRec.wi, bRec.wo, x) * spec;
+                lobes += lobePdf(comp, light_coh_sigma2, bRec.wi, bRec.wo, x) * spec;
             }
+            lobes.clampNegative();
         }
-
-        const auto fi = rpp.f;
-        Matrix3x3 Q = Matrix3x3(bRec.its.toLocal(fi.s),
-                                bRec.its.toLocal(fi.t),
-                                bRec.its.toLocal(fi.n)), Qt;
-        Q.transpose(Qt);
+        const Float DC = hasDC ? 1. : .0;
         
         // Rotate to sp-frame first
         rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
@@ -289,18 +283,9 @@ public:
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             // Mueller Fresnel pBSDF
-            const auto lambda = Spectrum::lambdas()[idx] * rcp_max_lambda;
             const auto M = MuellerFresnelRConductor(Frame::cosTheta(bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
 
-            Float D = .0f;
-            if (hasDC) {
-                const auto k = Spectrum::ks()[idx];
-                const auto h = k*(bRec.wo + bRec.wi);
-                const auto invSigma = rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f);
-                D = sqr(1/lambda) * gaussianSurface::diffract(invSigma, m_dcSigma2, Q,Qt, h);
-            }
-
-            const auto L = m00[idx] * (D + (1-m_q)*lobes[idx]) 
+            const auto L = m00[idx] * (DC*m_q + (1-m_q)*lobes[idx]) 
                             * ((Matrix4x4)M * rpp.S(idx));
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = L[0] / in[idx];
@@ -313,7 +298,7 @@ public:
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
         const auto hasDC = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component == 0);
-        const auto hasLobes = (bRec.typeMask & EDirectReflection) 
+        const auto hasLobes = (bRec.typeMask & EScatteredReflection)
                 && (bRec.component == -1 || bRec.component > 0);
         if ((!hasDC && !hasLobes)  
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
@@ -325,21 +310,29 @@ public:
         if (hasDC && hasLobes)
             probDC = m_q;
 
-        Float pdf = .0f;
-        if (hasDC) {
-            pdf += gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo) * probDC;
-        }
-        if (hasLobes) {
-            pdf += (1-probDC) * m_lobesPdf;
+        if (hasDC && measure == EDiscrete) {
+            // pdf += gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo) * probDC;
+            if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
+                return probDC;
+        } else if (hasLobes && measure == ESolidAngle) {
+            const auto &x  = gratingX(bRec.its);
+            const auto sigma2 = bRec.pltCtx->sigma2_min_um;
+            
+            Float pdf{};
+            for (auto comp=0;comp<(int)m_lobePhis.size();++comp) {
+                pdf += lobePdf(comp, sigma2, bRec.wi, bRec.wo, x);
+            }
+
+            return pdf;
         }
         
-        return pdf;
+        return 0;
     }
 
     Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
         const auto hasDC = (bRec.typeMask & EDirectReflection) 
                 && (bRec.component == -1 || bRec.component == 0);
-        const auto hasLobes = (bRec.typeMask & EDirectReflection) 
+        const auto hasLobes = (bRec.typeMask & EScatteredReflection) 
                 && (bRec.component == -1 || bRec.component > 0);
         if ((!hasDC && !hasLobes) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
@@ -349,22 +342,25 @@ public:
         const auto m00 = m_specularReflectance->eval(bRec.its) 
                             * fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
         const auto &x  = gratingX(bRec.its);
+        const auto lobeIdx = std::min((int)(sample.y*m_lobePhis.size()),(int)m_lobePhis.size()-1);
+        const auto sigma2 = bRec.pltCtx->sigma2_min_um;
 
         bRec.eta = 1.0f;
         if (hasDC && hasLobes) {
             if (sample.x < m_q) {
                 bRec.sampledComponent = 0;
                 bRec.sampledType = EDirectReflection;
-                bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                bRec.wo = reflect(bRec.wi);
+                // bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
                 
-                const auto pdf = m_q * gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
-                if (pdf <= RCPOVERFLOW)
-                    return Spectrum(.0f);
-                return m00 / pdf;
+                // const auto pdf = m_q * gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+                // if (pdf <= RCPOVERFLOW)
+                //     return Spectrum(.0f);
+                return m00;
             } else {
                 bRec.sampledComponent = 1;
-                bRec.sampledType = EDirectReflection;
-                bRec.wo = sampleLobe(bRec.wi, x, sample.y);
+                bRec.sampledType = EScatteredReflection;
+                bRec.wo = sampleLobe(lobeIdx, bRec.wi, sigma2, x, bRec.sampler->next2D());
                 if (bRec.wo.z<=0)
                     return Spectrum(.0f);
 
@@ -373,16 +369,17 @@ public:
         } else if (hasDC) {
             bRec.sampledComponent = 0;
             bRec.sampledType = EDirectReflection;
-            bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+            bRec.wo = reflect(bRec.wi);
+            // bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
             
-            const auto pdf = gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
-            if (pdf <= RCPOVERFLOW)
-                return Spectrum(.0f);
-            return m00 / pdf;
+            // const auto pdf = gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+            // if (pdf <= RCPOVERFLOW)
+            //     return Spectrum(.0f);
+            return m_q * m00;
         } else {
             bRec.sampledComponent = 1;
-            bRec.sampledType = EDirectReflection;
-            bRec.wo = sampleLobe(bRec.wi, x, sample.y);
+            bRec.sampledType = EScatteredReflection;
+            bRec.wo = sampleLobe(lobeIdx, bRec.wi, sigma2, x, bRec.sampler->next2D());
             if (bRec.wo.z<=0)
                 return Spectrum(.0f);
 
@@ -409,9 +406,9 @@ private:
     std::vector<Float> m_lobes;
     std::vector<Float> m_lobeEff;
     std::vector<Float> m_lobePhis;
-    Float m_pitch,m_norm,m_q;
-    Float m_dcSigma2;
-    Float m_maxPhi{}, m_lobesPdf;
+    std::vector<std::pair<Float,Float>> m_lobeRange;
+
+    Float m_pitch,m_q;
     bool m_gratingDirU{};
 
     ref<Texture> m_specularReflectance;

@@ -133,16 +133,15 @@ public:
         const auto M = Float(1);
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         
+        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+        
         const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             rpp.L(idx) = costheta_o * m00[idx] * M * rpp.S(idx);
-
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = rpp.L(idx)[0] / in[idx];
         }
-        
-        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo,Normal{ 0,0,1 }));
 
         return result;
     }

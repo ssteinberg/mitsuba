@@ -188,7 +188,7 @@ public:
         m_scale = props.getFloat("scale", 1.0f);
         
         m_distance = props.getFloat("distance", 1.496e+11);
-        m_lightArea = props.getFloat("source_area", 15e+17);
+        m_lightArea = props.getFloat("source_area", 15.2e+17);
     }
 
     EnvironmentMap(Stream *stream, InstanceManager *manager) : Emitter(stream, manager),

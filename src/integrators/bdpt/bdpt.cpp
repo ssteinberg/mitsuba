@@ -141,7 +141,7 @@ public:
         m_config.sampleDirect = props.getBoolean("sampleDirect", false);
         m_config.showWeighted = props.getBoolean("showWeighted", false);
         m_config.pltCtx.sigma_zz = props.getFloat("sigma_zz");
-        m_config.pltCtx.sigma_min_um = props.getFloat("sigma_min_um");
+        m_config.pltCtx.sigma2_min_um = props.getFloat("sigma2_min_um");
 
         #if BDPT_DEBUG == 1
         if (m_config.maxDepth == -1 || m_config.maxDepth > 6) {

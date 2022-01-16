@@ -333,7 +333,7 @@ public:
                 return Spectrum(0.0f);
 
             Vector wiBackup = bRec.wi;
-            // bRec.wi = wiPrime;
+            bRec.wi = wiPrime;
             Spectrum result = m_nested->sample(bRec, sample);
             bRec.wi = wiBackup;
             if (result.isZero())

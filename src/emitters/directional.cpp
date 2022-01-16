@@ -75,8 +75,10 @@ public:
         m_distance = props.getFloat("distance");
         m_lightArea = props.getFloat("source_area");
         
-        const double coh0 = sourceLight().coherenceLength(2*M_PI/.5, { 1,0,0 }, 1);
-        Log(EInfo, "Directional emitter --- Transverse coherence length: %.2f um", coh0);
+        Log(EInfo, "Directional emitter --- Transverse coherence length: %.2f um", 
+                    sourceLight().coherenceLength(2*M_PI/.5, { 1,0,0 }, 1));
+        Log(EInfo, "Directional emitter --- Transverse coherence sigma^2: %.3f", 
+                    sourceLight().coherenceSigma2(2*M_PI/.5, { 1,0,0 }, 1));
     }
 
     DirectionalEmitter(Stream *stream, InstanceManager *manager)
