@@ -431,7 +431,14 @@ public:
         return weight / pdf;
     }
 
-    Float getEta() const {
+    Spectrum getSpecularReflectance(const Intersection &its) const override {
+        return m_specularReflectance->eval(its);
+    }
+    virtual void getRefractiveIndex(const Intersection &its, Spectrum &n, Spectrum &k) const override {
+        n = Spectrum(m_eta);
+        k = Spectrum(.0f);
+    }
+    Float getEta() const override {
         return m_eta;
     }
 

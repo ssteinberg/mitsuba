@@ -257,7 +257,7 @@ public:
 
                 /* Temporarily force vertex measure to EArea. Needed to
                    handle BSDFs with diffuse + specular components */
-                if (!vs->isEmitterSupernode())
+                if (!vs->isEmitterSupernode() && !sampleDirect)
                     vs->measure = EArea;
                 if (!vt->isSensorSupernode())
                     vt->measure = EArea;
@@ -288,29 +288,21 @@ public:
 
                 value *= connectionEdge.evalCached(vs, vt, !sampleDirect ? 
                                                         PathEdge::EGeneralizedGeometricTerm :
-                                                        (PathEdge::ETransmittance | 
-                                                            (s == 1 ? PathEdge::ECosineRad : PathEdge::ECosineImp)));
+                                                        (PathEdge::ETransmittance | PathEdge::ECosineRad));
 
-                if (sampleDirect) {
-                    /* A direct sampling strategy was used, which generated
-                       two new vertices at one of the path ends. Temporarily
-                       modify the path to reflect this change */
-                    if (t == 1)
-                        sensorSubpath.swapEndpoints(vtNext, vtEdge, vt);
-                    else
-                        emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
-                }
+                /* A direct sampling strategy was used, which generated
+                   two new vertices at one of the path ends. Temporarily
+                   modify the path to reflect this change */
+                if (sampleDirect)
+                    emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
+
                 /* Compute the multiple importance sampling weight */
                 value *= Path::miWeight(scene, m_config.pltCtx,
                     emitterSubpath, &connectionEdge, sensorSubpath, 
                     s, t, m_config.sampleDirect, m_config.lightImage);
-                if (sampleDirect) {
-                    /* Now undo the previous change */
-                    if (t == 1)
-                        sensorSubpath.swapEndpoints(vtNext, vtEdge, vt);
-                    else
-                        emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
-                }
+
+                if (sampleDirect)
+                    emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
 
                 if (t >= 2)
                     sampleValue += value;

@@ -402,6 +402,7 @@ public:
 
     virtual RadiancePacket sourceLight() const {
         Assert(false && "Not implemneted");
+        return {};
     }
 
 

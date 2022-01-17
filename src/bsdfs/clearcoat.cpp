@@ -183,6 +183,7 @@ public:
         bool sampleNested = (bRec.typeMask & m_nested->getType() & BSDF::EAll)
             && (bRec.component == -1 || bRec.component < (int) m_components.size()-1);
 
+        Spectrum result = Spectrum(.0f);
         if (measure == EDiscrete && sampleSpecular &&
                 std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon) { 
             // Rotate to exitant sp-frame
@@ -192,15 +193,12 @@ public:
             const auto M = MuellerFresnelDielectric(Frame::cosTheta(bRec.wi), m_eta, true);
 
             const auto in = rpp.spectrum();
-            Spectrum result = Spectrum(.0f);
             for (std::size_t idx=0; idx<rpp.size(); ++idx) {
                 auto L = m00[idx] * ((Matrix4x4)M * rpp.S(idx));
                 if (in[idx]>RCPOVERFLOW)
                     result[idx] = L[0] / in[idx];
                 rpp.L(idx) = L;
             }
-
-            return result;
         } else if (sampleNested) {
             BSDFSamplingRecord bRecInt(bRec);
             bRecInt.wi = refractIn(bRec.wi);
@@ -241,18 +239,17 @@ public:
                 terms *= //sqr(m_invEta) *
                     Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRecInt.wo);
             
-            Spectrum result = Spectrum(.0f);
             for (std::size_t idx=0; idx<rpp.size(); ++idx) {
                 auto L = terms[idx] * rpp.S(idx);
                 if (in[idx]>RCPOVERFLOW)
                     result[idx] = L[0] / in[idx];
                 rpp.L(idx) = L;
-            }
 
-            return result;
+                Assert(std::isfinite(result[idx]) && std::isfinite(rpp.L(idx).x));
+            }
         }
 
-        return Spectrum(.0f);
+        return result;
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {

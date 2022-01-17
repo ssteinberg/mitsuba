@@ -1161,7 +1161,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
             return nullresult;
     }
     
-    if (!isSupernode())
+    if (!isSupernode() && !isSurfaceInteraction())
         *rpp *= importanceResult;
 
     return std::make_pair(importanceResult,radianceResult);

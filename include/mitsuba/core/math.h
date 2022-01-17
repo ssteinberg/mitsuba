@@ -243,6 +243,9 @@ inline size_t roundToPowerOfTwo(size_t value) {
     }
 #endif
 
+    template <typename T>
+    auto normalCDF(T x) noexcept { return 1/T(2) * (T(1) + std::erf(INV_SQRT_TWO * x)); }
+
     /// Arcsine variant that gracefully handles arguments > 1 that are due to roundoff errors
     inline float safe_asin(float value) {
         return std::asin(std::min(1.0f, std::max(-1.0f, value)));

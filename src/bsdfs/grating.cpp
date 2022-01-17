@@ -32,8 +32,6 @@
 #include <mitsuba/render/shape.h>
 #include <mitsuba/core/constants.h>
 
-#include <mitsuba/plt/gaussianSurface.hpp>
-
 #include "ior.h"
 #include "mitsuba/render/common.h"
 
@@ -43,27 +41,6 @@ class Grating : public BSDF {
 public:
     Grating(const Properties &props) : BSDF(props) {
         ref<FileResolver> fResolver = Thread::getThread()->getFileResolver();
-
-        m_specularReflectance = new ConstantSpectrumTexture(
-            props.getSpectrum("specularReflectance", Spectrum(1.0f)));
-
-        std::string materialName = props.getString("material", "Cu");
-
-        Spectrum intEta, intK;
-        if (boost::to_lower_copy(materialName) == "none") {
-            intEta = Spectrum(0.0f);
-            intK = Spectrum(1.0f);
-        } else {
-            intEta.fromContinuousSpectrum(InterpolatedSpectrum(
-                fResolver->resolve("data/ior/" + materialName + ".eta.spd")));
-            intK.fromContinuousSpectrum(InterpolatedSpectrum(
-                fResolver->resolve("data/ior/" + materialName + ".k.spd")));
-        }
-
-        Float extEta = lookupIOR(props, "extEta", "air");
-
-        m_eta = props.getSpectrum("eta", intEta) / extEta;
-        m_k   = props.getSpectrum("k", intK) / extEta;
 
         // Grating paramters
         std::vector<std::string> lobes = tokenize(props.getString("lobes", ""), " ,;");
@@ -78,22 +55,21 @@ public:
         }
 
         m_pitch = props.getFloat("pitch");
-        m_q = props.getFloat("q",0.5);
         m_gratingDirU = props.getBoolean("gratingInDirectionU", true);
+
+        m_q = props.getFloat("q",0.5);
+        m_lobesSamplingWeight = props.getFloat("lobesSamplingWeight",0.9); 
     }
 
     Grating(Stream *stream, InstanceManager *manager)
      : BSDF(stream, manager) {
-        m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
-        m_eta = Spectrum(stream);
-        m_k = Spectrum(stream);
-        
         m_lobes.resize(stream->readSize());
         for (size_t i=0; i<m_lobes.size(); ++i)
             m_lobes[i] = stream->readFloat();
         m_pitch = stream->readFloat();
         m_q = stream->readFloat();
         m_gratingDirU = stream->readBool();
+        m_nested = static_cast<BSDF *>(manager->getInstance(stream));
 
         configure();
     }
@@ -101,31 +77,23 @@ public:
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
-        manager->serialize(stream, m_specularReflectance.get());
-        m_eta.serialize(stream);
-        m_k.serialize(stream);
-
         stream->writeSize(m_lobes.size());
         for (size_t i=0; i<m_lobes.size(); ++i)
             stream->writeFloat(m_lobes[i]);
         stream->writeFloat(m_pitch);
         stream->writeFloat(m_q);
         stream->writeFloat(m_gratingDirU);
-        stream->writeBool(m_gratingDirU);
+        manager->serialize(stream, m_nested.get());
     }
 
     void configure() {
-        unsigned int extraFlags = 0;
-        if (!m_specularReflectance->isConstant())
-            extraFlags |= ESpatiallyVarying;
+        if (!m_nested)
+            Log(EError, "A child BSDF instance is required");
 
         m_components.clear();
-        m_components.push_back(EDirectReflection | EFrontSide | extraFlags);
-        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler | extraFlags);
-
-        /* Verify the input parameters and fix them if necessary */
-        m_specularReflectance = ensureEnergyConservation(
-            m_specularReflectance, "specularReflectance", 1.0f);
+        m_components.push_back(EScatteredReflection | EFrontSide | EUsesSampler);
+        for (int i=0; i<m_nested->getComponentCount(); ++i)
+            m_components.push_back(m_nested->getType(i));
         
         m_lobePhis.clear();
         m_lobeEff.clear();
@@ -148,11 +116,10 @@ public:
     }
 
     void addChild(const std::string &name, ConfigurableObject *child) {
-        if (child->getClass()->derivesFrom(MTS_CLASS(Texture))) {
-            if (name == "specularReflectance")
-                m_specularReflectance = static_cast<Texture *>(child);
-            else
-                BSDF::addChild(name, child);
+        if (child->getClass()->derivesFrom(MTS_CLASS(BSDF))) {
+            if (m_nested != NULL)
+                Log(EError, "Only a single nested BRDF can be added!");
+            m_nested = static_cast<BSDF *>(child);
         } else {
             BSDF::addChild(name, child);
         }
@@ -184,14 +151,19 @@ public:
         const auto &dc_wo = reflect(wi);
         const auto mean = lobeMean(comp, dc_wo, x);
         const auto k    = lobek(comp);
+        const auto rcp_stddev = std::sqrt(sigma2)*k;
         
         const auto n = normalize(cross(mean,dc_wo));
         const auto w = normalize(wo - dot(wo,n)*wo);
-        const auto theta2 = 1-sqr(dot(w,mean));
+        const auto theta2 = (1-sqr(dot(w,mean))) * sqr(rcp_stddev);
+        
+        const auto cdfmin = math::normalCDF((-1 - 0) * rcp_stddev);
+        const auto cdfmax = math::normalCDF(( 1 - 0) * rcp_stddev);
 
-        const auto eval = std::exp(-.5f * theta2 * sigma2*sqr(k))
-                            * std::sqrt(sigma2/(2*M_PI))*k
-                            / (m_lobePhis.size());
+        const auto r = (cdfmax-cdfmin) / Float(m_lobePhis.size());
+        const auto eval = r>RCPOVERFLOW ? 
+                std::exp(-theta2/2) * (INV_TWOPI * rcp_stddev / r)
+                : .0f;
         return eval;
     }
     
@@ -214,34 +186,37 @@ public:
     auto spectrum(int component) const noexcept {
         const auto spectral_bin = lobeSpectralBin(component);
         auto s = Spectrum(.0f);
-        s[spectral_bin] = m_lobeEff[component/(2*SPECTRUM_SAMPLES)] * SPECTRUM_SAMPLES;
+        s[spectral_bin] = m_lobeEff[component/2];
         return s;
     }
     
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
-        const auto hasDC = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
         const auto hasLobes = (bRec.typeMask & EScatteredReflection) 
-                && (bRec.component == -1 || bRec.component > 0) && measure == ESolidAngle;
-        if ((!hasDC && !hasLobes) 
+                && (bRec.component == -1 || bRec.component == 0) && measure == ESolidAngle;
+        bool sampleNested = (bRec.typeMask & m_nested->getType() & BSDF::EAll)
+            && (bRec.component == -1 || bRec.component < (int) m_components.size()-1);
+        if ((!sampleNested && !hasLobes) 
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
         
         Assert(!!bRec.pltCtx);
         
-        const auto m00 = m_specularReflectance->eval(bRec.its) 
-                            * fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
-        const auto &x = gratingX(bRec.its);
-        const auto sigma2 = bRec.pltCtx->sigma2_min_um;
-
         Spectrum result(.0f);
-        if (hasDC) {
-            result = m_q * m00;
-                    // gaussianSurface::envelopeScattered(m_dcSigma2, *bRec.pltCtx, bRec.wo + bRec.wi);
-        } else if (hasLobes) {
+        if (sampleNested) {
+            result = m_q * m_nested->envelope(bRec,eta,measure);
+        }
+        if (hasLobes) {
+            Spectrum n,k;
+            m_nested->getRefractiveIndex(bRec.its, n, k);
+            const auto m00 =  m_nested->getSpecularReflectance(bRec.its)
+                                * fresnelConductorApprox(Frame::cosTheta(bRec.wi), n, k);
+
+            const auto &x = gratingX(bRec.its);
+            const auto sigma2 = bRec.pltCtx->sigma2_min_um;
+            
             for (auto comp=0;comp<(int)m_lobePhis.size();++comp)
                 result += lobePdf(comp, sigma2, bRec.wi, bRec.wo, x) * 
-                    (1-m_q) * m00 * spectrum(comp);
+                    m00 * spectrum(comp);
         }
         
         return result;
@@ -249,141 +224,129 @@ public:
 
     Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
                   RadiancePacket &rpp, EMeasure measure) const { 
-        const auto hasDC = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component == 0) && measure == EDiscrete;
         const auto hasLobes = (bRec.typeMask & EScatteredReflection) 
-                && (bRec.component == -1 || bRec.component > 0) && measure == ESolidAngle;
-        if ((!hasDC && !hasLobes) 
+                && (bRec.component == -1 || bRec.component == 0) && measure == ESolidAngle;
+        bool sampleNested = (bRec.typeMask & m_nested->getType() & BSDF::EAll)
+            && (bRec.component == -1 || bRec.component < (int) m_components.size()-1);
+        if ((!sampleNested && !hasLobes) 
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
         
         Assert(!!bRec.pltCtx);
         
-        const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto &xw = rpp.f.toLocal(gratingXworld(bRec.its));
-        const auto &x  = gratingX(bRec.its);
-
-        Spectrum lobes(.0f);
+        auto result = Spectrum(.0f);
+        if (sampleNested) {
+            result = m_q * m_nested->eval(bRec, rpp, measure);
+        }
         if (hasLobes) {
+            Spectrum n,k;
+            m_nested->getRefractiveIndex(bRec.its, n, k);
+            const auto m00 =  m_nested->getSpecularReflectance(bRec.its);
+            const auto &xw = rpp.f.toLocal(gratingXworld(bRec.its));
+            const auto &x  = gratingX(bRec.its);
+                
+            Spectrum lobes(.0f);
             for (auto comp=0;comp<(int)m_lobePhis.size();++comp) {
                 const auto spec = spectrum(comp);
                 const auto k = Spectrum::ks()[lobeSpectralBin(comp)];
 
-                const auto light_coh_sigma2 = 2*rpp.coherenceSigma2(k, xw, bRec.pltCtx->sigma_zz * 1e+6f);
-                lobes += lobePdf(comp, light_coh_sigma2, bRec.wi, bRec.wo, x) * spec;
+                const auto light_coh_sigma2 = rpp.coherenceSigma2(k, xw, bRec.pltCtx->sigma_zz * 1e+6f);
+                lobes += m00 * lobePdf(comp, light_coh_sigma2, bRec.wi, bRec.wo, x) * spec;
             }
             lobes.clampNegative();
-        }
-        const Float DC = hasDC ? 1. : .0;
-        
-        // Rotate to sp-frame first
-        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
-        
-        const auto in = rpp.spectrum();
-        Spectrum result = Spectrum(.0f);
-        for (std::size_t idx=0; idx<rpp.size(); ++idx) {
-            // Mueller Fresnel pBSDF
-            const auto M = MuellerFresnelRConductor(Frame::cosTheta(bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
 
-            const auto L = m00[idx] * (DC*m_q + (1-m_q)*lobes[idx]) 
-                            * ((Matrix4x4)M * rpp.S(idx));
-            if (in[idx]>RCPOVERFLOW)
-                result[idx] = L[0] / in[idx];
-            rpp.L(idx) = L;
+            result += lobes;
+        
+            for (std::size_t idx=0; idx<rpp.size(); ++idx) {
+                rpp.setL(idx, result[idx]);
+            }
         }
         
         return result;
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        const auto hasDC = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component == 0);
         const auto hasLobes = (bRec.typeMask & EScatteredReflection)
-                && (bRec.component == -1 || bRec.component > 0);
-        if ((!hasDC && !hasLobes)  
+                && (bRec.component == -1 || bRec.component == 0);
+        const auto sampleNested = (bRec.typeMask & m_nested->getType() & BSDF::EAll)
+            && (bRec.component == -1 || bRec.component < (int) m_components.size()-1);
+        if ((!sampleNested && !hasLobes)  
             || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
             return .0f;
         
         Assert(!!bRec.pltCtx);
 
-        Float probDC = hasDC ? 1.0f : 0.0f;
-        if (hasDC && hasLobes)
-            probDC = m_q;
+        Float probDC = sampleNested ? 1.0f : 0.0f;
+        if (sampleNested && hasLobes)
+            probDC = 1-m_lobesSamplingWeight;
 
-        if (hasDC && measure == EDiscrete) {
-            // pdf += gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo) * probDC;
-            if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
-                return probDC;
-        } else if (hasLobes && measure == ESolidAngle) {
+        Float pdf{};
+        if (hasLobes && measure == ESolidAngle) {
             const auto &x  = gratingX(bRec.its);
             const auto sigma2 = bRec.pltCtx->sigma2_min_um;
             
-            Float pdf{};
-            for (auto comp=0;comp<(int)m_lobePhis.size();++comp) {
+            for (auto comp=0;comp<(int)m_lobePhis.size();++comp)
                 pdf += lobePdf(comp, sigma2, bRec.wi, bRec.wo, x);
-            }
-
-            return pdf;
+            pdf *= (1-probDC);
+        }
+        if (sampleNested) {
+            pdf += probDC * m_nested->pdf(bRec, measure);
         }
         
-        return 0;
+        return pdf;
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        const auto hasDC = (bRec.typeMask & EDirectReflection) 
-                && (bRec.component == -1 || bRec.component == 0);
+    Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample_) const {
         const auto hasLobes = (bRec.typeMask & EScatteredReflection) 
-                && (bRec.component == -1 || bRec.component > 0);
-        if ((!hasDC && !hasLobes) || Frame::cosTheta(bRec.wi) <= 0)
+                && (bRec.component == -1 || bRec.component == 0);
+        const auto sampleNested = (bRec.typeMask & m_nested->getType() & BSDF::EAll)
+            && (bRec.component == -1 || bRec.component < (int) m_components.size()-1);
+        if ((!sampleNested && !hasLobes) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(.0f);
         
         Assert(!!bRec.pltCtx);
         
-        const auto m00 = m_specularReflectance->eval(bRec.its) 
-                            * fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
-        const auto &x  = gratingX(bRec.its);
-        const auto lobeIdx = std::min((int)(sample.y*m_lobePhis.size()),(int)m_lobePhis.size()-1);
-        const auto sigma2 = bRec.pltCtx->sigma2_min_um;
-
-        bRec.eta = 1.0f;
-        if (hasDC && hasLobes) {
-            if (sample.x < m_q) {
-                bRec.sampledComponent = 0;
-                bRec.sampledType = EDirectReflection;
-                bRec.wo = reflect(bRec.wi);
-                // bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
-                
-                // const auto pdf = m_q * gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
-                // if (pdf <= RCPOVERFLOW)
-                //     return Spectrum(.0f);
-                return m00;
+        auto sample = sample_;
+        bool DC = sampleNested;
+        Float probDC = sampleNested ? 1 : 0;
+        if (sampleNested && hasLobes) {
+            probDC = 1-m_lobesSamplingWeight;
+            if (sample.x < probDC) {
+                sample.x /= probDC;
             } else {
-                bRec.sampledComponent = 1;
-                bRec.sampledType = EScatteredReflection;
-                bRec.wo = sampleLobe(lobeIdx, bRec.wi, sigma2, x, bRec.sampler->next2D());
-                if (bRec.wo.z<=0)
-                    return Spectrum(.0f);
-
-                return m00;
+                sample.x = (sample.x - probDC) / (1 - probDC);
+                DC = false;
             }
-        } else if (hasDC) {
-            bRec.sampledComponent = 0;
-            bRec.sampledType = EDirectReflection;
-            bRec.wo = reflect(bRec.wi);
-            // bRec.wo = gaussianSurface::sampleScattered(m_dcSigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
-            
-            // const auto pdf = gaussianSurface::scatteredPdf(m_dcSigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
-            // if (pdf <= RCPOVERFLOW)
-            //     return Spectrum(.0f);
-            return m_q * m00;
+        }
+        
+        bRec.eta = 1.0f;
+        if (DC) {
+            const auto pdf = hasLobes ? probDC : 1.0f;
+            return m_q * m_nested->sample(bRec, sample) / pdf;
         } else {
-            bRec.sampledComponent = 1;
+            const auto lobeIdx = std::min((int)(sample_.y*m_lobePhis.size()),(int)m_lobePhis.size()-1);
+        
+            Spectrum n,k;
+            m_nested->getRefractiveIndex(bRec.its, n, k);
+            const auto m00 =  m_nested->getSpecularReflectance(bRec.its)
+                                * fresnelConductorApprox(Frame::cosTheta(bRec.wi), n, k);
+            
+            const auto &x  = gratingX(bRec.its);
+            const auto sigma2 = bRec.pltCtx->sigma2_min_um;
+
+            bRec.sampledComponent = 0;
             bRec.sampledType = EScatteredReflection;
             bRec.wo = sampleLobe(lobeIdx, bRec.wi, sigma2, x, bRec.sampler->next2D());
             if (bRec.wo.z<=0)
                 return Spectrum(.0f);
 
-            return (1-m_q) * m00;
+            const auto pdf = sampleNested ? 1-probDC : 1.0f;
+            auto result = Spectrum(.0f);
+            for (auto comp=0;comp<(int)m_lobePhis.size();++comp)
+                result += lobePdf(comp, sigma2, bRec.wi, bRec.wo, x) * 
+                    m00 * spectrum(comp);
+
+            return result / pdf;
         }
     }
 
@@ -392,9 +355,6 @@ public:
         oss << "Grating[" << endl
             << "  id = \"" << getID() << "\"," << endl
             << "  q = " << indent(std::to_string(m_q)) << "," << endl
-            << "  specularReflectance = " << indent(m_specularReflectance->toString()) << "," << endl
-            << "  eta = " << m_eta.toString() << "," << endl
-            << "  k = " << m_k.toString() << endl
             << "  grating pitch = " << std::to_string(m_pitch) << endl
             << "  grating lobes count = " << std::to_string(m_lobes.size()) << endl
             << "]";
@@ -406,13 +366,12 @@ private:
     std::vector<Float> m_lobes;
     std::vector<Float> m_lobeEff;
     std::vector<Float> m_lobePhis;
-    std::vector<std::pair<Float,Float>> m_lobeRange;
 
     Float m_pitch,m_q;
+    Float m_lobesSamplingWeight{ .9 };
     bool m_gratingDirU{};
-
-    ref<Texture> m_specularReflectance;
-    Spectrum m_eta, m_k;
+    
+    ref<BSDF> m_nested;
 };
 
 

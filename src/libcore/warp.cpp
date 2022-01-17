@@ -156,16 +156,14 @@ Vector squareToTruncatedGaussian(Float stddev, const Point2 &mean, Sampler &samp
     return Vector{0,0,0};
 }
 
-template <typename T>
-auto normalCDF(T x) noexcept { return 1/T(2) * (T(1) + std::erf(INV_SQRT_TWO * x)); }
 Float squareToTruncatedGaussianPdf(Float stddev, const Point2 &mean, const Vector3 &pos) {
     const auto& p = Point2{ pos.x-mean.x,pos.y-mean.y } / stddev;
 
     const auto ymax = math::safe_sqrt(1-sqr(pos.x));
-    const auto cdfxmin = normalCDF((-1    - mean.x) / stddev);
-    const auto cdfxmax = normalCDF(( 1    - mean.x) / stddev);
-    const auto cdfymin = normalCDF((-ymax - mean.y) / stddev);
-    const auto cdfymax = normalCDF(( ymax - mean.y) / stddev);
+    const auto cdfxmin = math::normalCDF((-1    - mean.x) / stddev);
+    const auto cdfxmax = math::normalCDF(( 1    - mean.x) / stddev);
+    const auto cdfymin = math::normalCDF((-ymax - mean.y) / stddev);
+    const auto cdfymax = math::normalCDF(( ymax - mean.y) / stddev);
 
     const auto r = (cdfxmax-cdfxmin) * (cdfymax-cdfymin) * sqr(stddev);
     return r>RCPOVERFLOW ? std::exp(-(sqr(p.x) + sqr(p.y))/2) * INV_TWOPI / r : .0f;

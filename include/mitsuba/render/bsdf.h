@@ -344,6 +344,10 @@ public:
     virtual Spectrum getSpecularReflectance(const Intersection &its) const {
         return Spectrum(0.0f);
     }
+    
+    virtual void getRefractiveIndex(const Intersection &its, Spectrum &n, Spectrum &k) const {
+        n = k = {};
+    }
 
     /**
      * \brief Sample the BSDF and return the

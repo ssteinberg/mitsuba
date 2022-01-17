@@ -118,10 +118,12 @@ public:
         m_components.clear();
         m_components.push_back(EDirectReflection | EFrontSide | EBackSide | extraFlags);
         m_components.push_back(ENull | EFrontSide | EBackSide | extraFlags);
-        m_components.push_back(EScatteredReflection | EFrontSide | EBackSide | 
-                               EUsesSampler | extraFlags | extraFlagsScattered);
-        m_components.push_back(EScatteredTransmission | EFrontSide | EBackSide | 
-                               EUsesSampler | extraFlags | extraFlagsScattered);
+        if (m_sigma2->getMaximum().average()>0) {
+            m_components.push_back(EScatteredReflection | EFrontSide | EBackSide | 
+                                   EUsesSampler | extraFlags | extraFlagsScattered);
+            m_components.push_back(EScatteredTransmission | EFrontSide | EBackSide | 
+                                   EUsesSampler | extraFlags | extraFlagsScattered);
+        }
 
         /* Verify the input parameters and fix them if necessary */
         m_specularReflectance = ensureEnergyConservation(
@@ -350,6 +352,9 @@ public:
                     (internalRs.m[0][0]>0 ? (Matrix4x4)(T * internalRs * T)         : (Matrix4x4)(T*T));
         }
         
+        if (isReflection && M.m[0][0]<Epsilon)
+            return Spectrum(.0f);
+        
         const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
@@ -377,6 +382,8 @@ public:
 
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = rpp.S(idx)[0] / in[idx];
+        
+            Assert(std::isfinite(result[idx]) && std::isfinite(rpp.L(idx).x));
         }
 
         return result;
@@ -562,6 +569,13 @@ public:
                            !isDirect &&  isReflection ? EScatteredReflection : EScatteredTransmission;
         bRec.wo = wo;
         return weight / pdf;
+    }
+    Spectrum getSpecularReflectance(const Intersection &its) const override {
+        return m_specularReflectance->eval(its);
+    }
+    virtual void getRefractiveIndex(const Intersection &its, Spectrum &n, Spectrum &k) const override {
+        n = Spectrum(m_eta);
+        k = Spectrum(.0f);
     }
 
     std::string toString() const {

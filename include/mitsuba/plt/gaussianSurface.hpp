@@ -53,7 +53,7 @@ auto scatteredPdf(Float sigma2, const PLTContext &pltCtx, const Vector3 &wi, con
     return warp::squareToTruncatedGaussianPdf(std::sqrt(w)/k, -Point2{ wi.x,wi.y }, wo);
 }
 
-inline auto diffract(const Matrix3x3& invSigma, Float sigma2, const Matrix3x3 &Q, const Matrix3x3 &Qt, const Vector3 &h) {
+inline Float diffract(const Matrix3x3& invSigma, Float sigma2, const Matrix3x3 &Q, const Matrix3x3 &Qt, const Vector3 &h) {
     const auto& invTheta = Q*invSigma*Qt;
     
     const Matrix2x2& S = (1.f/sigma2) * Matrix2x2(1,0,0,1) + 
@@ -62,9 +62,11 @@ inline auto diffract(const Matrix3x3& invSigma, Float sigma2, const Matrix3x3 &Q
     Matrix2x2 invS;
     if (!S.invert2x2(invS))
         return Float(0);
-
+    
+    const auto d = S.det();
     const auto& h2 = Vector2{ h.x,h.y };
-    return 2*M_PI / std::sqrt(S.det()) * 
+    
+    return 2*M_PI / std::sqrt(d) * 
             std::exp(-dot(h2,invS*h2)/2);
 }
 

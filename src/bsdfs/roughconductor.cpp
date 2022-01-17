@@ -224,6 +224,8 @@ public:
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = L[0] / in[idx];
             rpp.L(idx) = L;
+
+            Assert(std::isfinite(result[idx]) && std::isfinite(rpp.L(idx).x));
         }
 
         return result;
@@ -320,6 +322,14 @@ public:
             return (1.f/pdf) * costheta_o * (Spectrum(1.f)-a) * m00 *
                 fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
+    }
+    
+    Spectrum getSpecularReflectance(const Intersection &its) const override {
+        return m_specularReflectance->eval(its);
+    }
+    virtual void getRefractiveIndex(const Intersection &its, Spectrum &n, Spectrum &k) const override {
+        n = m_eta;
+        k = m_k;
     }
 
     std::string toString() const {
