@@ -50,7 +50,8 @@ public:
         // optic axis and thickness for birefringent matrials
         m_A = props.getVector("opticAxis", Vector3{ 0,0,1 });
         m_A = normalize(m_A);
-        m_tau = new ConstantFloatTexture(props.getFloat("thickness", .0f));
+        m_tau = new ConstantFloatTexture(props.getFloat("thickness", .001f));
+        m_tauScale = props.getFloat("thicknessScale", 1.f);
         m_birefringence = new ConstantFloatTexture(props.getFloat("birefringence", .0f));
         
         if (props.hasProperty("polarizer")) {
@@ -81,6 +82,7 @@ public:
         m_specularTransmittance = static_cast<Texture *>(manager->getInstance(stream));
         m_birefringence = static_cast<Texture *>(manager->getInstance(stream));
         m_tau = static_cast<Texture *>(manager->getInstance(stream));
+        m_tauScale = stream->readFloat();
         m_polarizer = stream->readBool();
         m_polarizationDir = stream->readFloat();
         configure();
@@ -101,6 +103,7 @@ public:
         manager->serialize(stream, m_specularTransmittance.get());
         manager->serialize(stream, m_birefringence.get());
         manager->serialize(stream, m_tau.get());
+        stream->writeFloat(m_tauScale);
         stream->writeBool(m_polarizer);
         stream->writeFloat(m_polarizationDir);
     }
@@ -167,7 +170,7 @@ public:
         const float ei = m_etai;
         const float eo = m_etao;
         const float ee = eo + birefringence;
-        const auto tau = m_tau->eval(its).average() * 1e+6f; // in micron
+        const auto tau = m_tauScale * m_tau->eval(its).average() * 1e+6f; // in micron
         
         // Downwards and upwards propagating ordinary and extraordinary vectors in the slab
         Vector3 Io, Io2, Ie, Ie2;
@@ -202,9 +205,9 @@ public:
             const auto pp = tpo*top + tpe*tep;
             const auto oez = std::abs(Ioz-Iez)/2;
             const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
-            const auto t = mutual_coh * std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
+            const auto t = mutual_coh * 2*std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
 
-            const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + 2*ss*ps*t*sqrtLxLy);
+            const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + ss*ps*t*sqrtLxLy);
             Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
             Lx = nLx;
         }
@@ -243,7 +246,7 @@ public:
 
         const auto q = m_q->eval(bRec.its).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                         m_specularTransmittance->eval(bRec.its);
 
@@ -270,7 +273,7 @@ public:
                 R += T*T * R / (1-R*R);
 
             return costheta_o * (isReflection ? R : 1-R) *
-                    (Spectrum(1.f)-a) * m00 * 
+                    (1-a) * m00 * 
                     gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, h);
         }
         
@@ -352,6 +355,7 @@ public:
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             const auto k = Spectrum::ks()[idx];
             if (B!=.0f && !isReflection) {
+                // Birefringence
                 auto Lx = rpp.Lx(idx);
                 auto Ly = rpp.Ly(idx);
                 handle_birefringence(Lx, Ly, rpp, *bRec.pltCtx, bRec.its, B, bRec.wi, k, isReflection);
@@ -364,20 +368,12 @@ public:
             
             rpp.L(idx) = D * m00[idx] * (hasScattered ? 1-a : a) * rpp.S(idx);
 
-            if (!isReflection) {
-                // Polarizer
-                if (m_polarizer) {
-                    const auto& d = rpp.f.toLocal(BSDF::getFrame(bRec.its).toWorld(
-                        { std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 }));
-                    const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
-                    auto L = (Matrix4x4)P * rpp.S(idx);
-                    L[0] = std::max(.0f, L[0]);
-                    rpp.L(idx) = L;
-                }
+            // Polarizer
+            if (!isReflection && m_polarizer) {
+                const auto &dir = BSDF::getFrame(bRec.its).toWorld(
+                    { std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 });
+                rpp.polarize(dir);
             }
-            
-            if (rpp.L(idx)[0]<=0)
-                rpp.L(idx) = {0,0,0,0};
 
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = rpp.S(idx)[0] / in[idx];
@@ -466,7 +462,7 @@ public:
             R += T*T * R / (1-R*R);
         
         const auto q = m_q->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
         
         Vector3 wo;
@@ -475,9 +471,8 @@ public:
         auto weight = Spectrum(1.f);
         bool isDirect = hasDirect;
         if (hasDirect && hasScattered) {
-            const auto pdfdirect = a.average();
-            isDirect = sample.x <= pdfdirect;
-            pdf *= isDirect ? pdfdirect : 1.f-pdfdirect;
+            isDirect = sample.x <= a;
+            pdf *= isDirect ? a : 1.f-a;
         }
 
         bool isReflection = hasReflection;
@@ -508,7 +503,7 @@ public:
                 
                 const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                                 m_specularTransmittance->eval(bRec.its);
-                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00;
+                weight *= std::fabs(Frame::cosTheta(wo)) * (1-a) * m00;
             }
         }
         else if (hasReflection) {
@@ -526,7 +521,7 @@ public:
                 const auto h = bRec.wi + wo;
                 const auto m = normalize(h);
                 const auto r = fresnelDielectricExt(std::abs(dot(bRec.wi,m)),m_eta);
-                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00 * r;
+                weight *= std::fabs(Frame::cosTheta(wo)) * (1-a) * m00 * r;
             }
         }
         else {
@@ -548,7 +543,7 @@ public:
                     r += t*t * r / (1-r*r);
                 
                 wo = scattered_wo(wo);
-                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00 * (1-r);
+                weight *= std::fabs(Frame::cosTheta(wo)) * (1-a) * m00 * (1-r);
             }
         }
         
@@ -582,7 +577,7 @@ public:
 
     MTS_DECLARE_CLASS()
 private:
-    Float m_eta, m_etai, m_etao;
+    Float m_eta, m_etai, m_etao, m_tauScale;
     Vector3 m_A;
     ref<Texture> m_specularTransmittance;
     ref<Texture> m_specularReflectance;

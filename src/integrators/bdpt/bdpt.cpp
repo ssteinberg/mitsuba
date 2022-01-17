@@ -138,7 +138,7 @@ public:
         m_config.maxDepth = props.getInteger("maxDepth", -1);
         m_config.rrDepth = props.getInteger("rrDepth", 5);
         m_config.lightImage = props.getBoolean("lightImage", true);
-        m_config.sampleDirect = props.getBoolean("sampleDirect", false);
+        m_config.sampleDirect = props.getBoolean("sampleDirect", true);
         m_config.showWeighted = props.getBoolean("showWeighted", false);
         m_config.pltCtx.sigma_zz = props.getFloat("sigma_zz");
         m_config.pltCtx.sigma2_min_um = props.getFloat("sigma2_min_um");

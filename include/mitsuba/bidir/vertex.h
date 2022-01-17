@@ -308,9 +308,10 @@ struct MTS_EXPORT_BIDIR PathVertex {
      * \return The emitted radiance or importance divided by the
      *     sample probability per unit area per unit solid angle.
      */
-    Spectrum sampleDirect(const Scene *scene, Sampler *sampler,
+    bool sampleDirect(const Scene *scene, Sampler *sampler,
         PathVertex *endpoint, PathEdge *edge, PathVertex *sample,
-        ETransportMode mode) const;
+        ETransportMode mode, 
+        RadiancePacket *rpp = nullptr, Spectrum *throughput = nullptr) const;
 
     /**
      * \brief Sample the first vertices on a sensor subpath such that

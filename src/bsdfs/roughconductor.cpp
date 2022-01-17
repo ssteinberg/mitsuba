@@ -144,6 +144,7 @@ public:
         const auto q = m_q->eval(bRec.its).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
         const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
         
         if (!hasDirect && a.average()==1)
             return Spectrum(.0f);
@@ -155,7 +156,7 @@ public:
         }
         if (hasScattered) {
             const auto m = normalize(bRec.wo+bRec.wi);
-            return (Spectrum(1.f)-a) * m00 * 
+            return (Spectrum(1.f)-a) * costheta_o * m00 * 
                     gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, bRec.wo + bRec.wi) *
                     fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
@@ -184,6 +185,7 @@ public:
         const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
         const auto m = normalize(bRec.wo+bRec.wi);
         const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
         
         if (!hasDirect && a.average() >= 1-Epsilon)
             return Spectrum(.0f);
@@ -218,7 +220,7 @@ public:
             }
 
             auto L = m00[idx] * ((Matrix4x4)M * D*rpp.S(idx));
-            L *= hasDirect ? a[idx] : (1-a[idx]);
+            L *= hasDirect ? a[idx] : costheta_o * (1-a[idx]);
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = L[0] / in[idx];
             rpp.L(idx) = L;
@@ -273,6 +275,7 @@ public:
         const auto q = m_q->eval(bRec.its).average();
         const auto sigma2 = m_sigma2->eval(bRec.its).average();
         const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
 
         bRec.eta = 1.0f;
         if (hasScattered && hasDirect) {
@@ -295,7 +298,7 @@ public:
                     return Spectrum(.0f);
 
                 const auto m = normalize(bRec.wo+bRec.wi);
-                return (1.f/pdf) * (Spectrum(1.f)-a) * m00 *
+                return (1.f/pdf) * costheta_o * (Spectrum(1.f)-a) * m00 *
                     fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
             }
         } else if (hasDirect) {
@@ -314,7 +317,7 @@ public:
                 return Spectrum(.0f);
 
             const auto m = normalize(bRec.wo+bRec.wi);
-            return (1.f/pdf) * (Spectrum(1.f)-a) * m00 *
+            return (1.f/pdf) * costheta_o * (Spectrum(1.f)-a) * m00 *
                 fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
     }

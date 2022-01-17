@@ -98,13 +98,18 @@ struct RadiancePacket {
     auto polarize(const Vector3 &dir) noexcept {
         const auto& d = f.toLocal(dir);
         const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
+        
         Spectrum result(.0f);
         for (auto idx=0ull;idx<size();++idx) {
-            result[idx] = (*this)[idx][0];
-            (*this)[idx] = (Matrix4x4)P * (*this)[idx];
-            (*this)[idx][0] = std::max(.0f, (*this)[idx][0]);
-            result[idx] = result[idx]>RCPOVERFLOW ? (*this)[idx][0]/result[idx] : (Float)0;
+            const auto in = (*this)[idx][0];
+
+            ls[idx] = (Matrix4x4)P * ls[idx];
+            if (ls[idx][0]<=0)
+                ls[idx] = { 0,0,0,0 };
+            
+            result[idx] = in>RCPOVERFLOW ? ls[idx][0]/in : (Float)0;
         }
+
         return result;
     }
     
@@ -146,14 +151,15 @@ struct RadiancePacket {
 
     }
     void setL(std::size_t s, Float Lx, Float Ly) noexcept {
-        if (Lx+Ly<=0) {
+        const auto L = Lx+Ly;
+        if (L<=0) {
             ls[s] = { 0,0,0,0 };
             return;
         }
         const auto dlp = Ldlp(s);
         const auto cp  = Lcp(s);
         const auto sqrtLxLy = std::sqrt(Lx*Ly);
-        ls[s] = Vector4{ Lx+Ly,Lx-Ly,dlp*sqrtLxLy,cp*sqrtLxLy };
+        ls[s] = Vector4{ L, Lx-Ly, dlp*sqrtLxLy, cp*sqrtLxLy };
     }
     
     // const auto Thetax(Float k, Float sigma_zz) const noexcept {

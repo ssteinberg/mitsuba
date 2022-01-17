@@ -22,6 +22,7 @@
 #include <mitsuba/plt/plt.hpp>
 #include "bdpt_proc.h"
 #include "mitsuba/bidir/common.h"
+#include "mitsuba/render/common.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -141,8 +142,6 @@ public:
         const Scene *scene = m_scene;
         PathVertex tempEndpoint, tempSample;
         PathEdge tempEdge, connectionEdge;
-
-        BDAssert(!m_config.sampleDirect && "Not implemented");
  
         int maxS = (int)emitterSubpath.vertexCount()-1;
         std::vector<RadiancePacket> rps;
@@ -175,11 +174,6 @@ public:
 
         Spectrum sampleValue(0.0f);
         for (int s = maxS; s >= 0; --s) {
-            PathVertex
-                *vs = emitterSubpath.vertex(s),
-                *vsPred = emitterSubpath.vertexOrNull(s-1);
-            PathEdge *vsEdge = emitterSubpath.edgeOrNull(s-1);
-
             /* Determine the range of sensor vertices to be traversed,
                while respecting the specified maximum path length */
             int minT = std::max(2-s, m_config.lightImage ? 0 : 2),
@@ -188,6 +182,10 @@ public:
                 maxT = std::min(maxT, m_config.maxDepth + 1 - s);
 
             for (int t = maxT; t >= minT; --t) {
+                PathVertex
+                    *vs = emitterSubpath.vertex(s),
+                    *vsPred = emitterSubpath.vertexOrNull(s-1);
+                PathEdge *vsEdge = emitterSubpath.edgeOrNull(s-1);
                 PathVertex *vt = sensorSubpath.vertex(t);
                 PathVertex *vtNext = sensorSubpath.vertexOrNull(t-1);
                 PathEdge *vtEdge = sensorSubpath.edgeOrNull(t-1);
@@ -195,8 +193,11 @@ public:
                 /* Stores the pixel position associated with this sample */
                 Point2 samplePos = initialSamplePos;
                 Spectrum value = sweights[s];
+                RadiancePacket rp = s>0 ? rps[s-1] : RadiancePacket{};
                 if (value.isZero())
                     continue;
+                
+                bool sampleDirect = false;
 
                 RestoreMeasureHelper rmhvs(vs), rmhvt(vt);
 
@@ -215,6 +216,18 @@ public:
                     /* Make note of the changed pixel sample position */
                     if (!vs->getSamplePosition(vsPred, samplePos))
                         continue;
+                } else if (m_config.sampleDirect && (s == 1 && t > 1)) {
+                    if (vt->isDegenerate())
+                        continue;
+                    
+                    value = Spectrum(1.f);
+                    if (!vt->sampleDirect(scene, m_sampler,
+                                          &tempEndpoint, &tempEdge, &tempSample, ERadiance,
+                                          &rp, &value))
+                        continue;
+                    vs = &tempSample; vsPred = &tempEndpoint; vsEdge = &tempEdge;
+
+                    sampleDirect = true;
                 } else {
                     /* Can't connect degenerate endpoints */
                     if (vs->isDegenerate() || vt->isDegenerate())
@@ -226,9 +239,9 @@ public:
                     continue;
                 
                 // Propagate coherence information and update all weights
-                RadiancePacket rp = s>0 ? rps[s-1] : RadiancePacket{};
                 if (!vs->update(scene, vsPred, vt, 
-                                &rp, m_config.pltCtx, EImportance, &value))
+                                &rp, m_config.pltCtx, EImportance, &value, 
+                                sampleDirect && s==1 ? vs->measure : EArea))
                     continue;
 
                 /* Attempt to connect the two endpoints, which could result in
@@ -273,12 +286,31 @@ public:
                 if (value.isZero())
                     continue;
 
-                value *= connectionEdge.evalCached(vs, vt,
-                                                   PathEdge::EGeneralizedGeometricTerm);
+                value *= connectionEdge.evalCached(vs, vt, !sampleDirect ? 
+                                                        PathEdge::EGeneralizedGeometricTerm :
+                                                        (PathEdge::ETransmittance | 
+                                                            (s == 1 ? PathEdge::ECosineRad : PathEdge::ECosineImp)));
+
+                if (sampleDirect) {
+                    /* A direct sampling strategy was used, which generated
+                       two new vertices at one of the path ends. Temporarily
+                       modify the path to reflect this change */
+                    if (t == 1)
+                        sensorSubpath.swapEndpoints(vtNext, vtEdge, vt);
+                    else
+                        emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
+                }
                 /* Compute the multiple importance sampling weight */
                 value *= Path::miWeight(scene, m_config.pltCtx,
                     emitterSubpath, &connectionEdge, sensorSubpath, 
                     s, t, m_config.sampleDirect, m_config.lightImage);
+                if (sampleDirect) {
+                    /* Now undo the previous change */
+                    if (t == 1)
+                        sensorSubpath.swapEndpoints(vtNext, vtEdge, vt);
+                    else
+                        emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
+                }
 
                 if (t >= 2)
                     sampleValue += value;

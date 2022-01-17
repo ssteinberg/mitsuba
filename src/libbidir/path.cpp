@@ -16,6 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/core/constants.h"
 #include <mitsuba/bidir/path.h>
 
 MTS_NAMESPACE_BEGIN
@@ -491,7 +492,8 @@ Float Path::miWeight(const Scene *scene,
        to the (s,t) strategy, which can be done using a linear sweep. For
        details, refer to the Veach thesis, p.306. */
     for (int i=s+1; i<k; ++i) {
-        double next = pdf * (double) pdfImp[i] / (double) pdfRad[i],
+        double next = pdf>RCPOVERFLOW ? 
+                        pdf * (double) pdfImp[i] / (double) pdfRad[i] : 0,
                value = next;
 
         if (sampleDirect) {
@@ -513,7 +515,8 @@ Float Path::miWeight(const Scene *scene,
        evaluating the inverse of the previous expressions). */
     pdf = initial;
     for (int i=s-1; i>=0; --i) {
-        double next = pdf * (double) pdfRad[i+1] / (double) pdfImp[i+1],
+        double next = pdf>RCPOVERFLOW ? 
+                        pdf * (double) pdfRad[i+1] / (double) pdfImp[i+1] : 0,
                value = next;
 
         if (sampleDirect) {

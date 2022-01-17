@@ -1076,8 +1076,6 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 }
 
                 rpp->setFrame(wo);
-                for (auto idx=0ull;idx<rpp->size();++idx)
-                    (*rpp)[idx] *= importanceResult[idx];
             }
             break;
 
@@ -1095,15 +1093,6 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 if (measure != EDiscrete && dp != 0) {
                     importanceResult /= dp;
                     radianceResult /= dp;
-                }
-                
-                // Handle polarization
-                if (sensor->isPolarizing()) {
-                    const Transform &trafo = sensor->getWorldTransform()->eval(pRec.time);
-                    const auto &dir = trafo(sensor->getPolarizationDirection());
-                    const auto polres = rpp->polarize(dir);
-
-                    radianceResult *= importanceResult *= polres;
                 }
             }
             break;
@@ -1288,16 +1277,19 @@ Float PathVertex::evalPdf(const Scene *scene, const PathVertex *pred,
     return result;
 }
 
-Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
-        PathVertex *endpoint, PathEdge *edge, PathVertex *sample, ETransportMode mode) const {
+bool PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
+        PathVertex *endpoint, PathEdge *edge, PathVertex *sample, ETransportMode mode,
+        RadiancePacket *rpp, Spectrum *throughput) const {
     if (isDegenerate() || isAbsorbing())
-        return Spectrum(0.0f);
+        return false;
 
     memset(edge, 0, sizeof(PathEdge));
     memset(endpoint, 0, sizeof(PathVertex));
     memset(sample, 0, sizeof(PathVertex));
 
-    bool emitter = (mode == EImportance);
+    const auto emitter = (mode == ERadiance);
+    BDAssert(emitter || !rpp);
+
     DirectSamplingRecord dRec;
     if (isSurfaceInteraction())
         dRec = DirectSamplingRecord(getIntersection());
@@ -1309,13 +1301,13 @@ Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
     if (sampler)
         rsamp = sampler->next2D();
 
-    if (emitter)
+    if (emitter) 
         value = scene->sampleEmitterDirect(dRec, rsamp, false);
     else
         value = scene->sampleSensorDirect(dRec, rsamp, false);
 
     if (value.isZero())
-        return Spectrum(0.0f);
+        return false;
 
     const AbstractEmitter *ae = static_cast<const AbstractEmitter *>(dRec.object);
     bool degenPos = ae->getType() & AbstractEmitter::EDeltaPosition;
@@ -1329,7 +1321,7 @@ Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
 
     /* Be resilient to FP issues */
     if ((dRec.ref - dRec.p).lengthSquared() <= 0)
-        return Spectrum(0.0f);
+        return false;
 
     edge->medium = ae->getMedium();
     edge->pdf[mode] = 1.0f;
@@ -1347,7 +1339,14 @@ Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
 
     endpoint->weight[mode] = ae->evalPosition(dRec) / endpoint->pdf[mode];
 
-    return value;
+    if (emitter && rpp) {
+        *rpp = ae->sourceLight();
+        for (auto idx=0ull;idx<rpp->size();++idx)
+            rpp->setL(idx, value[idx]);
+    }
+    if (throughput)
+        *throughput *= value;
+    return true;
 }
 
 Float PathVertex::evalPdfDirect(const Scene *scene,
