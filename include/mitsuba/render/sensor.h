@@ -332,6 +332,10 @@ public:
      * except creating clones.
      */
     inline const Sampler *getSampler() const { return m_sampler.get(); }
+    
+    inline auto isPolarizing() const noexcept { return m_polarizer; }
+    inline const auto& polarizationDir() const noexcept { return m_polarizationDir; }
+    inline const auto& polarizationIntensity() const noexcept { return m_polarizationIntensity; }
 
     /// Serialize this sensor to a binary data stream
     virtual void serialize(Stream *stream, InstanceManager *manager) const;
@@ -372,6 +376,9 @@ protected:
     Float m_shutterOpen;
     Float m_shutterOpenTime;
     Float m_aspect;
+
+    bool m_polarizer{ false };
+    Float m_polarizationDir, m_polarizationIntensity;
 };
 
 /**

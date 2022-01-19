@@ -95,15 +95,17 @@ struct RadiancePacket {
         this->f = Frame{ dir };
     }
     
-    auto polarize(const Vector3 &dir) noexcept {
+    auto polarize(const Vector3 &dir, Float intensity = 1.f) noexcept {
         const auto& d = f.toLocal(dir);
-        const auto& P = MuellerPolarizer(std::atan2(d.y,d.x));
+
+        Matrix4x4 id; id.setIdentity();
+        const Matrix4x4& P = (intensity * MuellerPolarizer(std::atan2(d.y,d.x))) + ((1-intensity) * id);
         
         Spectrum result(.0f);
         for (auto idx=0ull;idx<size();++idx) {
             const auto in = (*this)[idx][0];
 
-            ls[idx] = (Matrix4x4)P * ls[idx];
+            ls[idx] = P * ls[idx];
             if (ls[idx][0]<=0)
                 ls[idx] = { 0,0,0,0 };
             

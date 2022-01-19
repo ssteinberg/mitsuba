@@ -242,6 +242,8 @@ public:
             Spectrum n,k;
             m_nested->getRefractiveIndex(bRec.its, n, k);
             const auto m00 =  m_nested->getSpecularReflectance(bRec.its);
+            const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
+
             const auto &xw = rpp.f.toLocal(gratingXworld(bRec.its));
             const auto &x  = gratingX(bRec.its);
                 
@@ -249,13 +251,14 @@ public:
             for (auto comp=0;comp<(int)m_lobePhis.size();++comp) {
                 const auto spec = spectrum(comp);
                 const auto k = Spectrum::ks()[lobeSpectralBin(comp)];
+                const auto lambda = Spectrum::lambdas()[lobeSpectralBin(comp)] * rcp_max_lambda;
 
                 const auto light_coh_sigma2 = rpp.coherenceSigma2(k, xw, bRec.pltCtx->sigma_zz * 1e+6f);
-                lobes += m00 * lobePdf(comp, light_coh_sigma2, bRec.wi, bRec.wo, x) * spec;
+                lobes += lobePdf(comp, light_coh_sigma2, bRec.wi, bRec.wo, x) * sqr(1/lambda) * spec;
             }
             lobes.clampNegative();
 
-            result += lobes;
+            result += m00 * lobes;
         
             for (std::size_t idx=0; idx<rpp.size(); ++idx) {
                 rpp.setL(idx, result[idx]);
@@ -376,5 +379,5 @@ private:
 
 
 MTS_IMPLEMENT_CLASS_S(Grating, false, BSDF)
-MTS_EXPORT_PLUGIN(Grating, "Rough grated surface BRDF");
+MTS_EXPORT_PLUGIN(Grating, "Diffraction grating BRDF");
 MTS_NAMESPACE_END

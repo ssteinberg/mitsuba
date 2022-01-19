@@ -961,12 +961,12 @@ bool PathVertex::update(const Scene *scene, const PathVertex *pred,
     // Update radiance packet
     const auto result = eval(scene, pred, succ, rpp, pltCtx, measure);
 
-    if (!isSurfaceInteraction() && !isMediumInteraction()) {
-        if (noninteraction_mode==EImportance) 
-            return updateEnvelope(scene, pred, succ, pltCtx, EImportance, throughput, measure);
-        else 
-            return updateEnvelope(scene, succ, pred, pltCtx, ERadiance, throughput, measure);
-    }
+    // if (!isSurfaceInteraction() && !isMediumInteraction()) {
+    //     if (noninteraction_mode==EImportance) 
+    //         return updateEnvelope(scene, pred, succ, pltCtx, EImportance, throughput, measure);
+    //     else 
+    //         return updateEnvelope(scene, succ, pred, pltCtx, ERadiance, throughput, measure);
+    // }
 
     const auto mode = EImportance;
     pdf[mode]       = evalPdf(scene, pred, succ, pltCtx, mode, measure);
@@ -1023,6 +1023,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
     const auto& nullresult = std::make_pair(Spectrum(.0f), Spectrum(.0f));
     Spectrum importanceResult(.0f), radianceResult(.0f);
     Vector wo(0.0f);
+    bool updateRpp{ true };
     
     if (type != EEmitterSupernode && type != EEmitterSample) {
         BDAssert(rpp->isValid() && !!pred);
@@ -1046,6 +1047,8 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 *rpp = emitter->sourceLight();
                 for (auto idx=0ull;idx<rpp->size();++idx)
                     rpp->setL(idx, importanceResult[idx]);
+
+                updateRpp = false;
             }
             break;
 
@@ -1056,6 +1059,8 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 const Sensor *sensor = static_cast<const Sensor *>(pRec.object);
                 pRec.measure = measure;
                 radianceResult = sensor->evalPosition(pRec);
+
+                updateRpp = false;
             }
             break;
 
@@ -1093,6 +1098,20 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                 if (measure != EDiscrete && dp != 0) {
                     importanceResult /= dp;
                     radianceResult /= dp;
+                }
+                
+                if (sensor->isPolarizing()) {
+                    *rpp *= importanceResult;
+
+                    const Transform &trafo = sensor->getWorldTransform()->eval(pRec.time).inverse();
+                    const auto& polPhi = sensor->polarizationDir();
+                    const auto &dir = trafo(Vector3{ std::cos(polPhi*M_PI/180),std::sin(polPhi*M_PI/180),0 });
+                    const auto polarization = rpp->polarize(dir, sensor->polarizationIntensity());
+
+                    importanceResult *= polarization;
+                    radianceResult   *= polarization;
+
+                    updateRpp = false;
                 }
             }
             break;
@@ -1161,7 +1180,7 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
             return nullresult;
     }
     
-    if (!isSupernode() && !isSurfaceInteraction())
+    if (updateRpp)
         *rpp *= importanceResult;
 
     return std::make_pair(importanceResult,radianceResult);

@@ -53,10 +53,12 @@ public:
         m_tau = new ConstantFloatTexture(props.getFloat("thickness", .001f));
         m_tauScale = props.getFloat("thicknessScale", 1.f);
         m_birefringence = new ConstantFloatTexture(props.getFloat("birefringence", .0f));
+        m_birefringenceScale = props.getFloat("birefringenceScale", 1.f);
         
         if (props.hasProperty("polarizer")) {
             m_polarizer = true;
             m_polarizationDir = props.getFloat("polarizer");
+            m_polarizationIntensity = props.getFloat("polarizerIntensity", 1.f);
         }
 
         m_specularReflectance = new ConstantSpectrumTexture(
@@ -85,6 +87,8 @@ public:
         m_tauScale = stream->readFloat();
         m_polarizer = stream->readBool();
         m_polarizationDir = stream->readFloat();
+        m_polarizationIntensity = stream->readFloat();
+
         configure();
     }
 
@@ -106,6 +110,7 @@ public:
         stream->writeFloat(m_tauScale);
         stream->writeBool(m_polarizer);
         stream->writeFloat(m_polarizationDir);
+        stream->writeFloat(m_polarizationIntensity);
     }
 
     void configure() {
@@ -323,7 +328,7 @@ public:
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                         m_specularTransmittance->eval(bRec.its);
 
-        const auto B = m_birefringence->eval(bRec.its).average();
+        const auto B = m_birefringenceScale * m_birefringence->eval(bRec.its).average();
         
         Float D = 1, costheta_i;
         if (!hasScattered) {
@@ -377,7 +382,7 @@ public:
             if (!isReflection && m_polarizer) {
                 const auto &dir = BSDF::getFrame(bRec.its).toWorld(
                     { std::cos(m_polarizationDir*M_PI/180),std::sin(m_polarizationDir*M_PI/180),0 });
-                rpp.polarize(dir);
+                rpp.polarize(dir, m_polarizationIntensity);
             }
 
             if (in[idx]>RCPOVERFLOW)
@@ -591,14 +596,20 @@ public:
 
     MTS_DECLARE_CLASS()
 private:
-    Float m_eta, m_etai, m_etao, m_tauScale;
+    Float m_eta, m_etai, m_etao;
     Vector3 m_A;
     ref<Texture> m_specularTransmittance;
     ref<Texture> m_specularReflectance;
-    ref<Texture> m_birefringence, m_tau;
     ref<Texture> m_q, m_sigma2;
+    
+    Float m_tauScale;
+    ref<Texture> m_tau;
+    
+    Float m_birefringenceScale;
+    ref<Texture> m_birefringence;
+
     bool m_polarizer{ false };
-    Float m_polarizationDir;
+    Float m_polarizationDir, m_polarizationIntensity;
 };
 
 MTS_IMPLEMENT_CLASS_S(ThinDielectric, false, BSDF)
