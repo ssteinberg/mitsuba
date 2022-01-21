@@ -36,4 +36,8 @@ plugins += env.SharedLibrary('twosided', ['twosided.cpp'])
 # irawanEnv.RelaxCompilerSettings()
 # plugins += irawanEnv.SharedLibrary('irawan', ['irawan.cpp'])
 
+# Only used for the two-scarabs scene
+# From Steinberg et al, Siggraph Asia 2021
+plugins += env.SharedLibrary('steinberg2021coating', ['steinberg2021coating.cpp'])
+
 Export('plugins')

@@ -1152,6 +1152,8 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                     importanceResult /= std::abs(Frame::cosTheta(bRec.wo));
                     radianceResult /= std::abs(Frame::cosTheta(bRec.wo));
                 }
+
+                updateRpp = false;
             }
             break;
 

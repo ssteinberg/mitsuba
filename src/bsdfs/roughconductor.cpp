@@ -224,8 +224,6 @@ public:
             if (in[idx]>RCPOVERFLOW)
                 result[idx] = L[0] / in[idx];
             rpp.L(idx) = L;
-
-            Assert(std::isfinite(result[idx]) && std::isfinite(rpp.L(idx).x));
         }
 
         return result;

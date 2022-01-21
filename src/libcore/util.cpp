@@ -673,6 +673,12 @@ void fresnel_dielectric(Float cosThetaI_, Float eta, Float &rs, Float &rp, Float
 
 void fresnel_conductor(Float cosThetaI, const std::complex<Float>& eta, 
                        std::complex<Float>& rs, std::complex<Float>& rp) {
+    const auto iszero = eta == std::complex<Float>{ 0,0 };
+    if (EXPECT_NOT_TAKEN(iszero)) {
+        rs = rp = 0;
+        return;
+    }
+    
     using cf_t = std::complex<Float>;
     const auto t2 = cf_t(1,0) - (1-sqr(cosThetaI)) * sqr(cf_t(1,0)/eta);
     const auto t = std::sqrt(t2);

@@ -75,11 +75,12 @@ public:
                 "allowed -- the area light inherits this transformation from "
                 "its parent shape");
 
-        m_radiance = props.getSpectrum("radiance", Spectrum::getD65());
+        const auto scale = props.getFloat("scale", 1.f);
+        m_radiance = props.getSpectrum("radiance", Spectrum::getD65()) * scale;
         m_power = Spectrum(0.0f); /// Don't know the power yet
         
         m_A = props.getFloat("A", .0f);
-        m_Omega = props.getFloat("Sigma", .0f);
+        m_Omega = props.getFloat("Omega", .0f);
     }
 
     AreaLight(Stream *stream, InstanceManager *manager)
@@ -215,7 +216,7 @@ public:
     
     virtual RadiancePacket sourceLight() const override {
         const auto c = 2 * M_PI * m_Omega/m_A;
-        return RadiancePacket{ m_radiance * M_PI, c, (Float)0 };
+        return RadiancePacket{ evalPosition({}), c, (Float)0 };
     }
 
     std::string toString() const {
