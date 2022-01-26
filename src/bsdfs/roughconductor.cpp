@@ -64,7 +64,7 @@ public:
         m_k   = props.getSpectrum("k", intK) / extEta;
 
         m_q = new ConstantFloatTexture(props.getFloat("q", .0f));
-        m_sigma2 = new ConstantFloatTexture(props.getFloat("sigma2", .0f));
+        m_sigma2 = new ConstantFloatTexture(props.getFloat("sigma2", 1.f));
     }
 
     Conductor(Stream *stream, InstanceManager *manager)

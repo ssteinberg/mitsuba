@@ -79,8 +79,8 @@ public:
         m_radiance = props.getSpectrum("radiance", Spectrum::getD65()) * scale;
         m_power = Spectrum(0.0f); /// Don't know the power yet
         
-        m_A = props.getFloat("A", .0f);
-        m_Omega = props.getFloat("Omega", .0f);
+        m_A = props.getFloat("A");
+        m_Omega = props.getFloat("Omega");
     }
 
     AreaLight(Stream *stream, InstanceManager *manager)

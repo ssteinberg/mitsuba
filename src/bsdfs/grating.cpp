@@ -55,7 +55,12 @@ public:
         }
 
         m_pitch = props.getFloat("pitch");
-        m_gratingDirU = props.getBoolean("gratingInDirectionU", true);
+        m_gratingType = props.getString("gratingType", "uv");
+        if (m_gratingType!="radial" && m_gratingType!="uv") {
+            SLog(EError, "gratingType must be \"radial\" or \"uv\".");
+            m_gratingType = "uv";
+        }
+        m_gratingDirU = props.getBoolean("gratingInDirectionU", true);  // Only used for "uv" grating
 
         m_q = props.getFloat("q",0.5);
         m_lobesSamplingWeight = props.getFloat("lobesSamplingWeight",0.9); 
@@ -168,6 +173,16 @@ public:
     }
     
     const Vector3 gratingXworld(const Intersection &its) const noexcept {
+        // "radial" grates in the direction tangent to disk centred at uv=(.5,.5)
+        if (m_gratingType == "radial") {
+            const auto &frame = BSDF::getFrame(its);
+            const auto uv = its.uv;
+            const auto R  = uv-Point2(.5f,.5f);
+            const auto p  = normalize(its.dpdu*R.x + its.dpdv*R.y);
+            return cross(frame.toWorld(Vector3{ 0,0,1 }),p); 
+        }
+        
+        // "uv" grates in the direction of u or v
         return normalize(m_gratingDirU ? its.dpdu : its.dpdv);
     }
     const Vector2 gratingX(const Intersection &its) const noexcept {
@@ -373,6 +388,7 @@ private:
     Float m_pitch,m_q;
     Float m_lobesSamplingWeight{ .9 };
     bool m_gratingDirU{};
+    std::string m_gratingType{};
     
     ref<BSDF> m_nested;
 };

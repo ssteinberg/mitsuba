@@ -54,6 +54,7 @@ public:
         m_tauScale = props.getFloat("thicknessScale", 1.f);
         m_birefringence = new ConstantFloatTexture(props.getFloat("birefringence", .0f));
         m_birefringenceScale = props.getFloat("birefringenceScale", 1.f);
+        m_birefringenceIntensityScale = props.getFloat("birefringenceIntensityScale", 1.f);
         
         if (props.hasProperty("polarizer")) {
             m_polarizer = true;
@@ -212,7 +213,7 @@ public:
             const auto pp = tpo*top + tpe*tep;
             const auto oez = std::abs(Ioz-Iez)/2;
             const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
-            const auto t = mutual_coh * 2*std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
+            const auto t = mutual_coh * 2*m_birefringenceIntensityScale*std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
 
             const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + ss*ps*t*sqrtLxLy);
             Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
@@ -605,7 +606,7 @@ private:
     Float m_tauScale;
     ref<Texture> m_tau;
     
-    Float m_birefringenceScale;
+    Float m_birefringenceScale,m_birefringenceIntensityScale;
     ref<Texture> m_birefringence;
 
     bool m_polarizer{ false };
