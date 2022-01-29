@@ -1,5 +1,5 @@
 /*
-    Copyright, PLT authors
+    Copyright, Shlomi Steinberg
 */
 
 #pragma once

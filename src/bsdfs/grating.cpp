@@ -16,6 +16,11 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+    Copyright, Shlomi Steinberg
+*/
+
+
 #include <cmath>
 
 #include <mitsuba/core/fresolver.h>

@@ -16,6 +16,11 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+    Copyright, Shlomi Steinberg
+*/
+
+
 #include <cmath>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/hw/basicshader.h>
@@ -86,6 +91,8 @@ public:
         m_birefringence = static_cast<Texture *>(manager->getInstance(stream));
         m_tau = static_cast<Texture *>(manager->getInstance(stream));
         m_tauScale = stream->readFloat();
+        m_birefringenceScale = stream->readFloat();
+        m_birefringenceIntensityScale = stream->readFloat();
         m_polarizer = stream->readBool();
         m_polarizationDir = stream->readFloat();
         m_polarizationIntensity = stream->readFloat();
@@ -109,6 +116,8 @@ public:
         manager->serialize(stream, m_birefringence.get());
         manager->serialize(stream, m_tau.get());
         stream->writeFloat(m_tauScale);
+        stream->writeFloat(m_birefringenceScale);
+        stream->writeFloat(m_birefringenceIntensityScale);
         stream->writeBool(m_polarizer);
         stream->writeFloat(m_polarizationDir);
         stream->writeFloat(m_polarizationIntensity);
