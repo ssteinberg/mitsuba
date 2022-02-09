@@ -1147,10 +1147,12 @@ std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVert
                     (Frame::cosTheta(bRec.wi) * woDotGeoN) /
                     (Frame::cosTheta(bRec.wo) * wiDotGeoN));
                 radianceResult /= sqr(eta);
+                *rpp /= sqr(eta);
 
                 if (measure != EDiscrete && Frame::cosTheta(bRec.wo) != 0) {
                     importanceResult /= std::abs(Frame::cosTheta(bRec.wo));
                     radianceResult /= std::abs(Frame::cosTheta(bRec.wo));
+                    *rpp /= std::abs(Frame::cosTheta(bRec.wo));
                 }
 
                 updateRpp = false;

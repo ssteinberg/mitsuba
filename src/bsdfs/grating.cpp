@@ -38,6 +38,7 @@
 #include <mitsuba/core/constants.h>
 
 #include "ior.h"
+#include "mitsuba/core/formatter.h"
 #include "mitsuba/render/common.h"
 
 MTS_NAMESPACE_BEGIN
@@ -174,7 +175,11 @@ public:
         const auto eval = r>RCPOVERFLOW ? 
                 std::exp(-theta2/2) * (INV_TWOPI * rcp_stddev / r)
                 : .0f;
-        return eval;
+        
+        // Hack to avoid numeric problems
+        // the lobes can be extremely sharp, resulting in massive values.
+        // Clamp.
+        return std::min<Float>(eval, 2e+4);
     }
     
     const Vector3 gratingXworld(const Intersection &its) const noexcept {

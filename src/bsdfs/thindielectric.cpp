@@ -62,7 +62,7 @@ public:
         m_birefringenceIntensityScale = props.getFloat("birefringenceIntensityScale", 1.f);
         
         if (props.hasProperty("polarizer")) {
-            m_polarizer = true;
+            m_polarizer = props.getBoolean("isPolarizer", true);
             m_polarizationDir = props.getFloat("polarizer");
             m_polarizationIntensity = props.getFloat("polarizerIntensity", 1.f);
         }
