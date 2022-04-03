@@ -16,6 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/core/constants.h"
 #include <mitsuba/bidir/path.h>
 
 MTS_NAMESPACE_BEGIN
@@ -28,6 +29,7 @@ void Path::initialize(const Scene *scene, Float time,
 }
 
 int Path::randomWalk(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         int nSteps, int rrStart, ETransportMode mode,
         MemoryPool &pool) {
     /* Determine the relevant edge and vertex to start the random walk */
@@ -43,7 +45,7 @@ int Path::randomWalk(const Scene *scene, Sampler *sampler,
         PathEdge *succEdge = pool.allocEdge();
 
         if (!curVertex->sampleNext(scene, sampler, predVertex, predEdge, succEdge,
-                succVertex, mode, rrStart != -1 && i >= rrStart, &throughput)) {
+                succVertex, pltCtx, mode, rrStart != -1 && i >= rrStart, &throughput)) {
             pool.release(succVertex);
             pool.release(succEdge);
             return i;
@@ -60,6 +62,7 @@ int Path::randomWalk(const Scene *scene, Sampler *sampler,
 }
 
 int Path::randomWalkFromPixel(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         int nSteps, const Point2i &pixelPosition, int rrStart, MemoryPool &pool) {
 
     PathVertex *v1 = pool.allocVertex(), *v2 = pool.allocVertex();
@@ -95,7 +98,7 @@ int Path::randomWalkFromPixel(const Scene *scene, Sampler *sampler,
         PathEdge *succEdge = pool.allocEdge();
 
         if (!curVertex->sampleNext(scene, sampler, predVertex, predEdge, succEdge,
-                succVertex, ERadiance, rrStart != -1 && t >= rrStart, &throughput)) {
+                succVertex, pltCtx, ERadiance, rrStart != -1 && t >= rrStart, &throughput)) {
             pool.release(succVertex);
             pool.release(succEdge);
             return t;
@@ -113,6 +116,7 @@ int Path::randomWalkFromPixel(const Scene *scene, Sampler *sampler,
 
 
 std::pair<int, int> Path::alternatingRandomWalkFromPixel(const Scene *scene, Sampler *sampler,
+        const PLTContext &pltCtx,
         Path &emitterPath, int nEmitterSteps, Path &sensorPath, int nSensorSteps,
         const Point2i &pixelPosition, int rrStart, MemoryPool &pool) {
     /* Determine the relevant edges and vertices to start the random walk */
@@ -156,7 +160,7 @@ std::pair<int, int> Path::alternatingRandomWalkFromPixel(const Scene *scene, Sam
             PathEdge *succEdgeT = pool.allocEdge();
 
             if (curVertexT->sampleNext(scene, sampler, predVertexT,
-                    predEdgeT, succEdgeT, succVertexT, ERadiance,
+                    predEdgeT, succEdgeT, succVertexT, pltCtx, ERadiance,
                     rrStart != -1 && t >= rrStart, &throughputT)) {
                 sensorPath.append(succEdgeT, succVertexT);
                 predVertexT = curVertexT;
@@ -177,7 +181,7 @@ std::pair<int, int> Path::alternatingRandomWalkFromPixel(const Scene *scene, Sam
             PathEdge *succEdgeS = pool.allocEdge();
 
             if (curVertexS->sampleNext(scene, sampler, predVertexS,
-                    predEdgeS, succEdgeS, succVertexS, EImportance,
+                    predEdgeS, succEdgeS, succVertexS, pltCtx, EImportance,
                     rrStart != -1 && s >= rrStart, &throughputS)) {
                 emitterPath.append(succEdgeS, succVertexS);
                 predVertexS = curVertexS;
@@ -263,8 +267,9 @@ bool Path::operator==(const Path &path) const {
     return true;
 }
 
-Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
-        const PathEdge *connectionEdge, const Path &sensorSubpath,
+Float Path::miWeight(const Scene *scene, 
+        const PLTContext &pltCtx,
+        const Path &emitterSubpath, const PathEdge *connectionEdge, const Path &sensorSubpath,
         int s, int t, bool sampleDirect, bool lightImage) {
     int k = s+t+1, n = k+1;
 
@@ -278,7 +283,7 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
        'i' when sampled from the adjacent vertex in the emitter
        and sensor direction, respectively. */
 
-    Float ratioEmitterDirect = 0.0f, ratioSensorDirect = 0.0f;
+    Float ratioEmitterDirect = 0.0f;//, ratioSensorDirect = 0.0f;
     Float *pdfImp      = (Float *) alloca(n * sizeof(Float)),
           *pdfRad      = (Float *) alloca(n * sizeof(Float));
     bool  *connectable = (bool *)  alloca(n * sizeof(bool)),
@@ -303,27 +308,27 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
     if (k <= 3)
         sampleDirect = false;
 
-    EMeasure vsMeasure = EArea, vtMeasure = EArea;
+    EMeasure vsMeasure = vs->measure, vtMeasure = vt->measure;
     if (sampleDirect) {
         /* When direct sampling is enabled, we may be able to create certain
            connections that otherwise would have failed (e.g. to an
            orthographic camera or a directional light source) */
         const AbstractEmitter *emitter = (s > 0 ? emitterSubpath.vertex(1) : vt)->getAbstractEmitter();
-        const AbstractEmitter *sensor = (t > 0 ? sensorSubpath.vertex(1) : vs)->getAbstractEmitter();
+        // const AbstractEmitter *sensor = (t > 0 ? sensorSubpath.vertex(1) : vs)->getAbstractEmitter();
 
         EMeasure emitterDirectMeasure = emitter->getDirectMeasure();
-        EMeasure sensorDirectMeasure  = sensor->getDirectMeasure();
+        // EMeasure sensorDirectMeasure  = sensor->getDirectMeasure();
 
         connectable[0]   = emitterDirectMeasure != EDiscrete && emitterDirectMeasure != EInvalidMeasure;
         connectable[1]   = emitterDirectMeasure != EInvalidMeasure;
-        connectable[k-1] = sensorDirectMeasure != EInvalidMeasure;
-        connectable[k]   = sensorDirectMeasure != EDiscrete && sensorDirectMeasure != EInvalidMeasure;
+        // connectable[k-1] = sensorDirectMeasure != EInvalidMeasure;
+        // connectable[k]   = sensorDirectMeasure != EDiscrete && sensorDirectMeasure != EInvalidMeasure;
 
         /* The following is needed to handle orthographic cameras &
            directional light sources together with direct sampling */
-        if (t == 1)
-            vtMeasure = sensor->needsDirectionSample() ? EArea : EDiscrete;
-        else if (s == 1)
+        // if (t == 1)
+        //     vtMeasure = sensor->needsDirectionSample() ? EArea : EDiscrete;
+        if (s == 1)
             vsMeasure = emitter->needsDirectionSample() ? EArea : EDiscrete;
     }
 
@@ -335,11 +340,11 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
         pdfImp[pos++] = emitterSubpath.vertex(i)->pdf[EImportance]
             * emitterSubpath.edge(i)->pdf[EImportance];
 
-    pdfImp[pos++] = vs->evalPdf(scene, vsPred, vt, EImportance, vsMeasure)
+    pdfImp[pos++] = vs->evalPdf(scene, vsPred, vt, pltCtx, EImportance, vsMeasure)
         * connectionEdge->pdf[EImportance];
 
     if (t > 0) {
-        pdfImp[pos++] = vt->evalPdf(scene, vs, vtPred, EImportance, vtMeasure)
+        pdfImp[pos++] = vt->evalPdf(scene, vs, vtPred, pltCtx, EImportance, vtMeasure)
             * sensorSubpath.edge(t-1)->pdf[EImportance];
 
         for (int i=t-1; i>0; --i)
@@ -354,11 +359,11 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
             pdfRad[pos++] = emitterSubpath.vertex(i+1)->pdf[ERadiance]
                 * emitterSubpath.edge(i)->pdf[ERadiance];
 
-        pdfRad[pos++] = vs->evalPdf(scene, vt, vsPred, ERadiance, vsMeasure)
+        pdfRad[pos++] = vs->evalPdf(scene, vt, vsPred, pltCtx, ERadiance, vsMeasure)
             * emitterSubpath.edge(s-1)->pdf[ERadiance];
     }
 
-    pdfRad[pos++] = vt->evalPdf(scene, vtPred, vs, ERadiance, vtMeasure)
+    pdfRad[pos++] = vt->evalPdf(scene, vtPred, vs, pltCtx, ERadiance, vtMeasure)
         * connectionEdge->pdf[ERadiance];
 
     for (int i=t; i>0; --i)
@@ -401,7 +406,7 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
             (cur->isOnSurface()  ? dot(edge->d, cur->getGeometricNormal())  : 1));
     }
 
-    int emitterRefIndirection = 2, sensorRefIndirection = k-2;
+    int emitterRefIndirection = 2;//, sensorRefIndirection = k-2;
 
     /* One more array sweep before the actual useful work starts -- phew! :)
        "Collapse" edges/vertices that were caused by BSDF::ENull interactions.
@@ -441,8 +446,8 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
            we must keep track of the reference vertex for direct sampling strategies. */
         if (start == 2)
             emitterRefIndirection = end + 1;
-        else if (end == k-2)
-            sensorRefIndirection = start - 1;
+        // else if (end == k-2)
+        //     sensorRefIndirection = start - 1;
 
         i = end;
     }
@@ -463,19 +468,19 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
                 measure == ESolidAngle ? EArea : measure) / pdfImp[1];
 
         /* Direct connection probability of the sensor */
-        sample = t>0 ? sensorSubpath.vertex(1) : vs;
-        ref = sensorRefIndirection <= s ? emitterSubpath.vertex(sensorRefIndirection)
-            : sensorSubpath.vertex(k-sensorRefIndirection);
-        measure = sample->getAbstractEmitter()->getDirectMeasure();
+        // sample = t>0 ? sensorSubpath.vertex(1) : vs;
+        // ref = sensorRefIndirection <= s ? emitterSubpath.vertex(sensorRefIndirection)
+        //     : sensorSubpath.vertex(k-sensorRefIndirection);
+        // measure = sample->getAbstractEmitter()->getDirectMeasure();
 
-        if (connectable[k-1] && connectable[sensorRefIndirection])
-            ratioSensorDirect = ref->evalPdfDirect(scene, sample, ERadiance,
-                measure == ESolidAngle ? EArea : measure) / pdfRad[k-1];
+        // if (connectable[k-1] && connectable[sensorRefIndirection])
+        //     ratioSensorDirect = ref->evalPdfDirect(scene, sample, ERadiance,
+        //         measure == ESolidAngle ? EArea : measure) / pdfRad[k-1];
 
         if (s == 1)
             initial /= ratioEmitterDirect;
-        else if (t == 1)
-            initial /= ratioSensorDirect;
+        // else if (t == 1)
+        //     initial /= ratioSensorDirect;
     }
 
     double weight = 1, pdf = initial;
@@ -487,14 +492,15 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
        to the (s,t) strategy, which can be done using a linear sweep. For
        details, refer to the Veach thesis, p.306. */
     for (int i=s+1; i<k; ++i) {
-        double next = pdf * (double) pdfImp[i] / (double) pdfRad[i],
+        double next = pdf>RCPOVERFLOW ? 
+                        pdf * (double) pdfImp[i] / (double) pdfRad[i] : 0,
                value = next;
 
         if (sampleDirect) {
             if (i == 1)
                 value *= ratioEmitterDirect;
-            else if (i == sensorRefIndirection)
-                value *= ratioSensorDirect;
+            // else if (i == sensorRefIndirection)
+            //     value *= ratioSensorDirect;
         }
 
 
@@ -509,14 +515,15 @@ Float Path::miWeight(const Scene *scene, const Path &emitterSubpath,
        evaluating the inverse of the previous expressions). */
     pdf = initial;
     for (int i=s-1; i>=0; --i) {
-        double next = pdf * (double) pdfRad[i+1] / (double) pdfImp[i+1],
+        double next = pdf>RCPOVERFLOW ? 
+                        pdf * (double) pdfRad[i+1] / (double) pdfImp[i+1] : 0,
                value = next;
 
         if (sampleDirect) {
             if (i == 1)
                 value *= ratioEmitterDirect;
-            else if (i == sensorRefIndirection)
-                value *= ratioSensorDirect;
+            // else if (i == sensorRefIndirection)
+            //     value *= ratioSensorDirect;
         }
 
         int tPrime = k-i-1;

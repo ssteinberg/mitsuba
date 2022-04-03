@@ -400,7 +400,7 @@ public:
             Vector wo = its->shFrame.toLocal(ray.d);
             BSDFSamplingRecord bRec(*its, -wo, wo, ERadiance);
             bRec.typeMask = BSDF::ENull;
-            transmittance *= its->getBSDF()->eval(bRec, EDiscrete);
+            transmittance *= its->getBSDF()->envelope(bRec, EDiscrete);
 
             ray.o = ray(its->t);
             ray.mint = Epsilon;

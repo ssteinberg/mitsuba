@@ -18,6 +18,7 @@
 
 #include <mitsuba/bidir/vertex.h>
 #include <mitsuba/bidir/edge.h>
+#include <mitsuba/plt/plt.hpp>
 #include "bdpt_proc.h"
 
 MTS_NAMESPACE_BEGIN
@@ -139,6 +140,8 @@ public:
         m_config.lightImage = props.getBoolean("lightImage", true);
         m_config.sampleDirect = props.getBoolean("sampleDirect", true);
         m_config.showWeighted = props.getBoolean("showWeighted", false);
+        m_config.pltCtx.sigma_zz = props.getFloat("sigma_zz");
+        m_config.pltCtx.sigma2_min_um = props.getFloat("sigma2_min_um");
 
         #if BDPT_DEBUG == 1
         if (m_config.maxDepth == -1 || m_config.maxDepth > 6) {
@@ -239,5 +242,5 @@ private:
 };
 
 MTS_IMPLEMENT_CLASS_S(BDPTIntegrator, false, Integrator)
-MTS_EXPORT_PLUGIN(BDPTIntegrator, "Bidirectional path tracer");
+MTS_EXPORT_PLUGIN(BDPTIntegrator, "PLT bidirectional path tracer");
 MTS_NAMESPACE_END

@@ -21,6 +21,7 @@
 #define __MITSUBA_CORE_UTIL_H_
 
 #include <boost/static_assert.hpp>
+#include <complex>
 
 #if defined(__MSVC__)
 # include <intrin.h>
@@ -409,6 +410,11 @@ extern MTS_EXPORT_CORE Point2 toSphericalCoordinates(const Vector &v);
 //! @{ \name Fresnel reflectance computation and related things
 // -----------------------------------------------------------------------
 
+extern MTS_EXPORT_CORE void fresnel_dielectric(Float cosThetaI_, Float eta, 
+        Float &rs, Float &rp, Float &ts, Float &tp);
+extern MTS_EXPORT_CORE void fresnel_conductor(Float cosThetaI, const std::complex<Float>& eta, 
+        std::complex<Float>& rs, std::complex<Float>& rp);
+    
 /**
  * \brief Calculates the unpolarized Fresnel reflection coefficient
  * at a planar interface between two dielectrics

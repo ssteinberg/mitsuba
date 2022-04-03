@@ -16,6 +16,9 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/plt/plt.hpp"
+#include "mitsuba/render/common.h"
+#include "mitsuba/render/sensor.h"
 #include <mitsuba/bidir/path.h>
 #include <mitsuba/core/statistics.h>
 
@@ -34,7 +37,7 @@ void PathVertex::makeEndpoint(const Scene *scene, Float time, ETransportMode mod
 
 bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
         const PathVertex *pred, const PathEdge *predEdge,
-        PathEdge *succEdge, PathVertex *succ,
+        PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         ETransportMode mode, bool russianRoulette, Spectrum *throughput) {
     Ray ray;
 
@@ -153,9 +156,10 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                 Vector wo;
 
                 /* Sample the BSDF */
-                BSDFSamplingRecord bRec(its, sampler, mode);
+                BSDFSamplingRecord bRec(its, sampler, pltCtx, mode);
                 bRec.wi = its.toLocal(wi);
-                weight[mode] = bsdf->sample(bRec, pdf[mode], sampler->next2D());
+                weight[mode] = bsdf->sample(bRec, sampler->next2D());
+                pdf[mode]    = bsdf->pdf(bRec);
                 if (weight[mode].isZero())
                     return false;
 
@@ -194,19 +198,11 @@ bool PathVertex::sampleNext(const Scene *scene, Sampler *sampler,
                 pdf[1-mode] = bsdf->pdf(bRec, (EMeasure) measure);
                 if (pdf[1-mode] <= RCPOVERFLOW) {
                     /* This can happen rarely due to roundoff errors -- be strict */
+                    // SLog(EWarn, "Reverse PDF is zero.");
                     return false;
                 }
 
-                if (!(bsdf->getType() & BSDF::ENonSymmetric)) {
-                    /* Make use of symmetry -- no need to re-evaluate
-                       everything (only the pdf and cosine factors changed) */
-                    weight[1-mode] = weight[mode] * (pdf[mode] / pdf[1-mode]);
-                    if (measure == ESolidAngle)
-                        weight[1-mode] *=
-                            std::abs(Frame::cosTheta(bRec.wo) / Frame::cosTheta(bRec.wi));
-                } else {
-                    weight[1-mode] = bsdf->eval(bRec, (EMeasure) measure) / pdf[1-mode];
-                }
+                weight[1-mode] = bsdf->envelope(bRec, (EMeasure) measure) / pdf[1-mode];
                 bRec.reverse();
 
                 /* Adjoint BSDF for shading normals */
@@ -485,7 +481,7 @@ Float PathVertex::perturbPositionPdf(const PathVertex *target, Float stddev) con
 }
 
 bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
-    const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ,
+    const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
     const Vector &d, Float dist, EVertexType desiredType, ETransportMode mode) {
     Ray ray(getPosition(), d, pred->getTime());
 
@@ -551,9 +547,9 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
                 Vector wi = normalize(pred->getPosition() - its.p);
                 Vector wo(d);
 
-                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), mode);
+                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), pltCtx, mode);
 
-                Spectrum value = bsdf->eval(bRec);
+                Spectrum value = bsdf->envelope(bRec);
                 Float prob = bsdf->pdf(bRec);
 
                 if (value.isZero() || prob <= RCPOVERFLOW)
@@ -596,15 +592,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
                     /* This can happen rarely due to roundoff errors -- be strict */
                     return false;
                 }
-                if (!(bsdf->getType() & BSDF::ENonSymmetric)) {
-                    /* Make use of symmetry -- no need to re-evaluate
-                       everything (only the pdf and cosine factors changed) */
-                    weight[1-mode] = weight[mode] * std::abs(
-                        (pdf[mode] * Frame::cosTheta(bRec.wo)) /
-                        (pdf[1-mode] * Frame::cosTheta(bRec.wi)));
-                } else {
-                    weight[1-mode] = bsdf->eval(bRec, ESolidAngle) / pdf[1-mode];
-                }
+                weight[1-mode] = bsdf->envelope(bRec, ESolidAngle) / pdf[1-mode];
                 bRec.reverse();
 
                 /* Adjoint BSDF for shading normals */
@@ -678,7 +666,7 @@ bool PathVertex::perturbDirection(const Scene *scene, const PathVertex *pred,
 }
 
 bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pred,
-        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ,
+        const PathEdge *predEdge, PathEdge *succEdge, PathVertex *succ, const PLTContext &pltCtx,
         unsigned int componentType_, Float dist, EVertexType desiredType, ETransportMode mode) {
     BDAssert(isSurfaceInteraction());
 
@@ -692,7 +680,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
 
     Vector wi = normalize(pred->getPosition() - its.p);
 
-    BSDFSamplingRecord bRec(its, NULL, mode);
+    BSDFSamplingRecord bRec(its, NULL, pltCtx, mode);
     bRec.typeMask = componentType_;
 
     bRec.wi = its.toLocal(wi);
@@ -716,7 +704,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
         return false;
     }
 
-    weight[mode] = bsdf->eval(bRec, EDiscrete) / prob;
+    weight[mode] = bsdf->envelope(bRec, EDiscrete) / prob;
     pdf[mode] = prob;
     measure = EDiscrete;
     componentType = componentType_;
@@ -752,10 +740,7 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
         return false;
     }
 
-    if (!(bsdf->getType() & BSDF::ENonSymmetric))
-        weight[1-mode] = weight[mode];
-    else
-        weight[1-mode] = bsdf->eval(bRec, EDiscrete) / pdf[1-mode];
+    weight[1-mode] = bsdf->envelope(bRec, EDiscrete) / pdf[1-mode];
     bRec.reverse();
 
     /* Adjoint BSDF for shading normals */
@@ -777,8 +762,61 @@ bool PathVertex::propagatePerturbation(const Scene *scene, const PathVertex *pre
     return true;
 }
 
-Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure) const {
+bool PathVertex::updateEnvelope(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, Spectrum *throughput, 
+        EMeasure measure) {
+
+    pdf[mode]       = evalPdf(scene, pred, succ, pltCtx, mode, measure);
+    pdf[1-mode]     = evalPdf(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
+    weight[mode]    = envelope(scene, pred, succ, pltCtx, mode, measure);
+    weight[1-mode]  = envelope(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
+
+    if (throughput)
+        *throughput *= weight[mode];
+    if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
+        return false;
+
+    Float weightFwd = pdf[mode]   <= RCPOVERFLOW ? 0 : 1 / pdf[mode],
+          weightBkw = pdf[1-mode] <= RCPOVERFLOW ? 0 : 1 / pdf[1-mode];
+
+    this->measure = measure;
+
+    if (!isSupernode() && measure == EArea) {
+        if (!pred->isSupernode()) {
+            Vector d = pred->getPosition() - getPosition();
+            Float invDistSqr = 1.0f / d.lengthSquared();
+            weightBkw *= invDistSqr;
+            d *= std::sqrt(invDistSqr);
+            if (isOnSurface() && isConnectable())
+                weightBkw *= absDot(getShadingNormal(), d);
+            if (pred->isOnSurface())
+                weightBkw *= absDot(pred->getGeometricNormal(), d);
+        }
+
+        if (!succ->isSupernode()) {
+            Vector d = succ->getPosition() - getPosition();
+            Float invDistSqr = 1.0f / d.lengthSquared();
+            weightFwd *= invDistSqr;
+            d *= std::sqrt(invDistSqr);
+            if (isOnSurface() && isConnectable())
+                weightFwd *= absDot(getShadingNormal(), d);
+            if (succ->isOnSurface())
+                weightFwd *= absDot(succ->getGeometricNormal(), d);
+        }
+        if (isSurfaceInteraction())
+            componentType = BSDF::ESmooth;
+    }
+
+    weight[mode]   *= weightFwd;
+    weight[1-mode] *= weightBkw;
+
+    return true;
+}
+
+Spectrum PathVertex::envelope(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, const PLTContext &pltCtx, ETransportMode mode, 
+        EMeasure measure) const {
     Spectrum result(0.0f);
     Vector wo(0.0f);
 
@@ -861,7 +899,8 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                 if (measure == EArea)
                     measure = ESolidAngle;
 
-                result = bsdf->eval(bRec, measure);
+                auto eta = 1.f;
+                result = bsdf->envelope(bRec, eta, measure);
 
                 /* Prevent light leaks due to the use of shading normals */
                 Float wiDotGeoN = dot(its.geoFrame.n, wi),
@@ -876,6 +915,9 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
                     result *= std::abs(
                         (Frame::cosTheta(bRec.wi) * woDotGeoN) /
                         (Frame::cosTheta(bRec.wo) * wiDotGeoN));
+                }
+                else if (bRec.eta != 1) {
+                    result /= sqr(eta);
                 }
 
                 if (measure != EDiscrete && Frame::cosTheta(bRec.wo) != 0)
@@ -903,7 +945,7 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
             break;
 
         default:
-            SLog(EError, "PathVertex::eval(): Encountered an "
+            SLog(EError, "PathVertex::envelope(): Encountered an "
                 "unsupported vertex type (%i)!", type);
             return Spectrum(0.0f);
     }
@@ -911,8 +953,246 @@ Spectrum PathVertex::eval(const Scene *scene, const PathVertex *pred,
     return result;
 }
 
+bool PathVertex::update(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, 
+        RadiancePacket *rpp, const PLTContext &pltCtx,
+        ETransportMode noninteraction_mode,
+        Spectrum *throughput, EMeasure measure) {
+    // Update radiance packet
+    const auto result = eval(scene, pred, succ, rpp, pltCtx, measure);
+
+    // if (!isSurfaceInteraction() && !isMediumInteraction()) {
+    //     if (noninteraction_mode==EImportance) 
+    //         return updateEnvelope(scene, pred, succ, pltCtx, EImportance, throughput, measure);
+    //     else 
+    //         return updateEnvelope(scene, succ, pred, pltCtx, ERadiance, throughput, measure);
+    // }
+
+    const auto mode = EImportance;
+    pdf[mode]       = evalPdf(scene, pred, succ, pltCtx, mode, measure);
+    pdf[1-mode]     = evalPdf(scene, succ, pred, pltCtx, (ETransportMode) (1-mode), measure);
+    weight[mode]    = result.first;
+    weight[1-mode]  = result.second;
+
+    if (throughput)
+        *throughput *= weight[noninteraction_mode];
+    if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
+        return false;
+
+    Float weightFwd = pdf[mode]   <= RCPOVERFLOW ? 0 : 1 / pdf[mode],
+          weightBkw = pdf[1-mode] <= RCPOVERFLOW ? 0 : 1 / pdf[1-mode];
+
+    this->measure = measure;
+
+    if (!isSupernode() && measure == EArea) {
+        if (!pred->isSupernode()) {
+            Vector d = pred->getPosition() - getPosition();
+            Float invDistSqr = 1.0f / d.lengthSquared();
+            weightBkw *= invDistSqr;
+            d *= std::sqrt(invDistSqr);
+            if (isOnSurface() && isConnectable())
+                weightBkw *= absDot(getShadingNormal(), d);
+            if (pred->isOnSurface())
+                weightBkw *= absDot(pred->getGeometricNormal(), d);
+        }
+
+        if (!succ->isSupernode()) {
+            Vector d = succ->getPosition() - getPosition();
+            Float invDistSqr = 1.0f / d.lengthSquared();
+            weightFwd *= invDistSqr;
+            d *= std::sqrt(invDistSqr);
+            if (isOnSurface() && isConnectable())
+                weightFwd *= absDot(getShadingNormal(), d);
+            if (succ->isOnSurface())
+                weightFwd *= absDot(succ->getGeometricNormal(), d);
+        }
+        if (isSurfaceInteraction())
+            componentType = BSDF::ESmooth;
+    }
+
+    weight[mode]   *= weightFwd;
+    weight[1-mode] *= weightBkw;
+
+    return true;
+}
+
+std::pair<Spectrum,Spectrum> PathVertex::eval(const Scene *scene, const PathVertex *pred,
+        const PathVertex *succ, 
+        RadiancePacket *rpp, const PLTContext &pltCtx,
+        EMeasure measure) const {
+    const auto& nullresult = std::make_pair(Spectrum(.0f), Spectrum(.0f));
+    Spectrum importanceResult(.0f), radianceResult(.0f);
+    Vector wo(0.0f);
+    bool updateRpp{ true };
+    
+    if (type != EEmitterSupernode && type != EEmitterSample) {
+        BDAssert(rpp->isValid() && !!pred);
+        
+        // Propagate radiance packet
+        const auto src = pred->getPosition();
+        const auto pos = this->getPosition();
+        const auto len = (pos-src).length();
+        rpp->r += len;
+    }
+
+    switch (type) {
+        case EEmitterSupernode: {
+                if (!!pred || succ->type != EEmitterSample)
+                    return nullresult;
+                PositionSamplingRecord pRec = succ->getPositionSamplingRecord();
+                const Emitter *emitter = static_cast<const Emitter *>(pRec.object);
+                pRec.measure = measure;
+                importanceResult = emitter->evalPosition(pRec);
+
+                *rpp = emitter->sourceLight();
+                for (auto idx=0ull;idx<rpp->size();++idx)
+                    rpp->setL(idx, importanceResult[idx]);
+
+                updateRpp = false;
+            }
+            break;
+
+        case ESensorSupernode: {
+                if (!!succ || pred->type != ESensorSample)
+                    return nullresult;
+                PositionSamplingRecord pRec = succ->getPositionSamplingRecord();
+                const Sensor *sensor = static_cast<const Sensor *>(pRec.object);
+                pRec.measure = measure;
+                radianceResult = sensor->evalPosition(pRec);
+
+                updateRpp = false;
+            }
+            break;
+
+        case EEmitterSample: {
+                if (pred->type != EEmitterSupernode)
+                    return nullresult;
+                
+                const auto target = succ->getPosition();
+                const PositionSamplingRecord &pRec = getPositionSamplingRecord();
+                const Emitter *emitter = static_cast<const Emitter *>(pRec.object);
+                wo = normalize(target - pRec.p);
+                DirectionSamplingRecord dRec(wo, measure == EArea ? ESolidAngle : measure);
+                importanceResult = radianceResult = emitter->evalDirection(dRec, pRec);
+                Float dp = absDot(pRec.n, wo);
+                if (measure != EDiscrete && dp != 0) {
+                    importanceResult /= dp;
+                    radianceResult /= dp;
+                }
+
+                rpp->setFrame(wo);
+            }
+            break;
+
+        case ESensorSample: {
+                if (succ->type != ESensorSupernode)
+                    return nullresult;
+
+                const auto target = pred->getPosition();
+                const PositionSamplingRecord &pRec = getPositionSamplingRecord();
+                const Sensor *sensor = static_cast<const Sensor *>(pRec.object);
+                wo = normalize(target - pRec.p);
+                DirectionSamplingRecord dRec(wo, measure == EArea ? ESolidAngle : measure);
+                importanceResult = radianceResult = sensor->evalDirection(dRec, pRec);
+                Float dp = absDot(pRec.n, wo);
+                if (measure != EDiscrete && dp != 0) {
+                    importanceResult /= dp;
+                    radianceResult /= dp;
+                }
+                
+                if (sensor->isPolarizing()) {
+                    *rpp *= importanceResult;
+
+                    const Transform &trafo = sensor->getWorldTransform()->eval(pRec.time).inverse();
+                    const auto& polPhi = sensor->polarizationDir();
+                    const auto &dir = trafo(Vector3{ std::cos(polPhi*M_PI/180),std::sin(polPhi*M_PI/180),0 });
+                    const auto polarization = rpp->polarize(dir, sensor->polarizationIntensity());
+
+                    importanceResult *= polarization;
+                    radianceResult   *= polarization;
+
+                    updateRpp = false;
+                }
+            }
+            break;
+
+        case ESurfaceInteraction: {
+                const Intersection &its = getIntersection();
+                const BSDF *bsdf = its.getBSDF();
+
+                Point predP = pred->getPosition(),
+                      succP = succ->getPosition();
+
+                Vector wi = normalize(predP - its.p);
+                wo = normalize(succP - its.p);
+
+                BSDFSamplingRecord bRec(its, its.toLocal(wi),
+                        its.toLocal(wo), pltCtx, EImportance);
+
+                if (measure == EArea)
+                    measure = ESolidAngle;
+
+                /* Prevent light leaks due to the use of shading normals */
+                Float wiDotGeoN = dot(its.geoFrame.n, wi),
+                      woDotGeoN = dot(its.geoFrame.n, wo);
+
+                if (wiDotGeoN * Frame::cosTheta(bRec.wi) <= 0 ||
+                    woDotGeoN * Frame::cosTheta(bRec.wo) <= 0)
+                    return nullresult;
+
+                auto eta = 1.f;
+                importanceResult = radianceResult = bsdf->eval(bRec, eta, *rpp, measure);
+                
+                importanceResult *= std::abs(
+                    (Frame::cosTheta(bRec.wi) * woDotGeoN) /
+                    (Frame::cosTheta(bRec.wo) * wiDotGeoN));
+                radianceResult /= sqr(eta);
+                *rpp /= sqr(eta);
+
+                if (measure != EDiscrete && Frame::cosTheta(bRec.wo) != 0) {
+                    importanceResult /= std::abs(Frame::cosTheta(bRec.wo));
+                    radianceResult /= std::abs(Frame::cosTheta(bRec.wo));
+                    *rpp /= std::abs(Frame::cosTheta(bRec.wo));
+                }
+
+                updateRpp = false;
+            }
+            break;
+
+        case EMediumInteraction: {
+                if (measure != ESolidAngle && measure != EArea)
+                    return nullresult;
+
+                const MediumSamplingRecord &mRec = getMediumSamplingRecord();
+
+                Point predP = pred->getPosition(),
+                      succP = succ->getPosition();
+
+                Vector wi = normalize(predP - mRec.p);
+                wo = normalize(succP - mRec.p);
+
+                const PhaseFunction *phase = mRec.medium->getPhaseFunction();
+                PhaseFunctionSamplingRecord pRec(mRec, wi, wo, EImportance);
+
+                importanceResult = radianceResult = mRec.sigmaS * phase->eval(pRec);
+            }
+            break;
+
+        default:
+            SLog(EError, "PathVertex::eval(): Encountered an "
+                "unsupported vertex type (%i)!", type);
+            return nullresult;
+    }
+    
+    if (updateRpp)
+        *rpp *= importanceResult;
+
+    return std::make_pair(importanceResult,radianceResult);
+}
+
 Float PathVertex::evalPdf(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure) const {
+        const PathVertex *succ, const PLTContext &pltCtx, 
+        ETransportMode mode, EMeasure measure) const {
     Vector wo(0.0f);
     Float dist = 0.0f, result = 0.0f;
 
@@ -974,7 +1254,7 @@ Float PathVertex::evalPdf(const Scene *scene, const PathVertex *pred,
                 Point predP = pred->getPosition();
                 Vector wi = normalize(predP - its.p);
 
-                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), mode);
+                BSDFSamplingRecord bRec(its, its.toLocal(wi), its.toLocal(wo), pltCtx, mode);
                 result = bsdf->pdf(bRec, measure == EArea ? ESolidAngle : measure);
 
                 /* Prevent light leaks due to the use of shading normals */
@@ -1020,16 +1300,19 @@ Float PathVertex::evalPdf(const Scene *scene, const PathVertex *pred,
     return result;
 }
 
-Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
-        PathVertex *endpoint, PathEdge *edge, PathVertex *sample, ETransportMode mode) const {
+bool PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
+        PathVertex *endpoint, PathEdge *edge, PathVertex *sample, ETransportMode mode,
+        RadiancePacket *rpp, Spectrum *throughput) const {
     if (isDegenerate() || isAbsorbing())
-        return Spectrum(0.0f);
+        return false;
 
     memset(edge, 0, sizeof(PathEdge));
     memset(endpoint, 0, sizeof(PathVertex));
     memset(sample, 0, sizeof(PathVertex));
 
-    bool emitter = (mode == EImportance);
+    const auto emitter = (mode == ERadiance);
+    BDAssert(emitter || !rpp);
+
     DirectSamplingRecord dRec;
     if (isSurfaceInteraction())
         dRec = DirectSamplingRecord(getIntersection());
@@ -1041,13 +1324,13 @@ Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
     if (sampler)
         rsamp = sampler->next2D();
 
-    if (emitter)
+    if (emitter) 
         value = scene->sampleEmitterDirect(dRec, rsamp, false);
     else
         value = scene->sampleSensorDirect(dRec, rsamp, false);
 
     if (value.isZero())
-        return Spectrum(0.0f);
+        return false;
 
     const AbstractEmitter *ae = static_cast<const AbstractEmitter *>(dRec.object);
     bool degenPos = ae->getType() & AbstractEmitter::EDeltaPosition;
@@ -1061,7 +1344,7 @@ Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
 
     /* Be resilient to FP issues */
     if ((dRec.ref - dRec.p).lengthSquared() <= 0)
-        return Spectrum(0.0f);
+        return false;
 
     edge->medium = ae->getMedium();
     edge->pdf[mode] = 1.0f;
@@ -1079,7 +1362,14 @@ Spectrum PathVertex::sampleDirect(const Scene *scene, Sampler *sampler,
 
     endpoint->weight[mode] = ae->evalPosition(dRec) / endpoint->pdf[mode];
 
-    return value;
+    if (emitter && rpp) {
+        *rpp = ae->sourceLight();
+        for (auto idx=0ull;idx<rpp->size();++idx)
+            rpp->setL(idx, value[idx]);
+    }
+    if (throughput)
+        *throughput *= value;
+    return true;
 }
 
 Float PathVertex::evalPdfDirect(const Scene *scene,
@@ -1159,54 +1449,6 @@ bool PathVertex::cast(const Scene *scene, EVertexType desired) {
                 type, desired);
         return false;
     }
-}
-
-bool PathVertex::update(const Scene *scene, const PathVertex *pred,
-        const PathVertex *succ, ETransportMode mode, EMeasure measure) {
-
-    pdf[mode]       = evalPdf(scene, pred, succ, mode, measure);
-    pdf[1-mode]     = evalPdf(scene, succ, pred, (ETransportMode) (1-mode), measure);
-    weight[mode]    = eval(scene, pred, succ, mode, measure);
-    weight[1-mode]  = eval(scene, succ, pred, (ETransportMode) (1-mode), measure);
-
-    if (weight[mode].isZero() || pdf[mode] <= RCPOVERFLOW)
-        return false;
-
-    Float weightFwd = pdf[mode]   <= RCPOVERFLOW ? 0 : 1 / pdf[mode],
-          weightBkw = pdf[1-mode] <= RCPOVERFLOW ? 0 : 1 / pdf[1-mode];
-
-    this->measure = measure;
-
-    if (!isSupernode() && measure == EArea) {
-        if (!pred->isSupernode()) {
-            Vector d = pred->getPosition() - getPosition();
-            Float invDistSqr = 1.0f / d.lengthSquared();
-            weightBkw *= invDistSqr;
-            d *= std::sqrt(invDistSqr);
-            if (isOnSurface() && isConnectable())
-                weightBkw *= absDot(getShadingNormal(), d);
-            if (pred->isOnSurface())
-                weightBkw *= absDot(pred->getGeometricNormal(), d);
-        }
-
-        if (!succ->isSupernode()) {
-            Vector d = succ->getPosition() - getPosition();
-            Float invDistSqr = 1.0f / d.lengthSquared();
-            weightFwd *= invDistSqr;
-            d *= std::sqrt(invDistSqr);
-            if (isOnSurface() && isConnectable())
-                weightFwd *= absDot(getShadingNormal(), d);
-            if (succ->isOnSurface())
-                weightFwd *= absDot(succ->getGeometricNormal(), d);
-        }
-        if (isSurfaceInteraction())
-            componentType = BSDF::ESmooth;
-    }
-
-    weight[mode]   *= weightFwd;
-    weight[1-mode] *= weightBkw;
-
-    return true;
 }
 
 Point PathVertex::getPosition() const {
@@ -1315,7 +1557,8 @@ bool PathVertex::getSamplePosition(const PathVertex *v, Point2 &result) const {
 bool PathVertex::connect(const Scene *scene,
         const PathVertex *pred, const PathEdge *predEdge,
         PathVertex *vs, PathEdge *edge, PathVertex *vt,
-        const PathEdge *succEdge, const PathVertex *succ) {
+        const PathEdge *succEdge, const PathVertex *succ,
+        const PLTContext &pltCtx) {
 
     if (vs->isEmitterSupernode()) {
         if (!vt->cast(scene, PathVertex::EEmitterSample))
@@ -1333,10 +1576,10 @@ bool PathVertex::connect(const Scene *scene,
     if (vs->isDegenerate() || vt->isDegenerate())
         return false;
 
-    if (!vs->update(scene, pred, vt, EImportance))
+    if (!vs->updateEnvelope(scene, pred, vt, pltCtx, EImportance))
         return false;
 
-    if (!vt->update(scene, succ, vs, ERadiance))
+    if (!vt->updateEnvelope(scene, succ, vs, pltCtx, ERadiance))
         return false;
 
     return edge->connect(scene, predEdge, vs, vt, succEdge);
@@ -1346,6 +1589,7 @@ bool PathVertex::connect(const Scene *scene,
         const PathVertex *pred, const PathEdge *predEdge,
         PathVertex *vs, PathEdge *edge, PathVertex *vt,
         const PathEdge *succEdge, const PathVertex *succ,
+        const PLTContext &pltCtx,
         EMeasure vsMeasure, EMeasure vtMeasure) {
 
     if (vs->isEmitterSupernode()) {
@@ -1357,10 +1601,10 @@ bool PathVertex::connect(const Scene *scene,
             return false;
     }
 
-    if (!vs->update(scene, pred, vt, EImportance, vsMeasure))
+    if (!vs->updateEnvelope(scene, pred, vt, pltCtx, EImportance, nullptr, vsMeasure))
         return false;
 
-    if (!vt->update(scene, succ, vs, ERadiance, vtMeasure))
+    if (!vt->updateEnvelope(scene, succ, vs, pltCtx, ERadiance, nullptr, vtMeasure))
         return false;
 
     return edge->connect(scene, predEdge, vs, vt, succEdge);

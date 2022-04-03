@@ -25,6 +25,7 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/common.h>
 #include <mitsuba/render/shader.h>
+#include <mitsuba/plt/plt.hpp>
 
 MTS_NAMESPACE_BEGIN
 
@@ -62,8 +63,12 @@ public:
      * \param mode
      *      The transported mode (\ref ERadiance or \ref EImportance)
      */
-    explicit inline BSDFSamplingRecord(const Intersection &its, Sampler *sampler,
-            ETransportMode mode = ERadiance);
+    explicit BSDFSamplingRecord(const Intersection &its, Sampler *sampler,
+        ETransportMode mode = ERadiance);
+    inline explicit BSDFSamplingRecord(const Intersection &its, Sampler *sampler, const PLTContext &pltCtx,
+        ETransportMode mode = ERadiance) : BSDFSamplingRecord(its,sampler,mode) {
+        this->pltCtx = &pltCtx;
+    }
 
     /**
      * \brief Given a surface interaction an an incident/exitant direction
@@ -82,8 +87,12 @@ public:
      * \param mode
      *      The transported mode (\ref ERadiance or \ref EImportance)
      */
-    inline BSDFSamplingRecord(const Intersection &its, const Vector &wo,
+    explicit BSDFSamplingRecord(const Intersection &its, const Vector &wo,
         ETransportMode mode = ERadiance);
+    inline explicit BSDFSamplingRecord(const Intersection &its, const Vector &wo, const PLTContext &pltCtx,
+        ETransportMode mode = ERadiance) : BSDFSamplingRecord(its,wo,mode) {
+        this->pltCtx = &pltCtx;
+    }
 
     /**
      * \brief Given a surface interaction an an incident/exitant direction
@@ -104,9 +113,13 @@ public:
      *      The transported mode (\ref ERadiance or \ref EImportance)
      *
      */
-    inline BSDFSamplingRecord(const Intersection &its,
+    explicit BSDFSamplingRecord(const Intersection &its,
         const Vector &wi, const Vector &wo,
         ETransportMode mode = ERadiance);
+    inline explicit BSDFSamplingRecord(const Intersection &its, const Vector &wi, const Vector &wo, 
+        const PLTContext &pltCtx, ETransportMode mode = ERadiance) : BSDFSamplingRecord(its,wi,wo,mode) {
+        this->pltCtx = &pltCtx;
+    }
 
     /**
      * \brief Reverse the direction of light transport in the record
@@ -120,6 +133,8 @@ public:
     /// Return a string representation
     std::string toString() const;
 public:
+    const PLTContext *pltCtx{ nullptr };
+    
     /// Reference to the underlying surface interaction
     const Intersection &its;
 
@@ -227,23 +242,21 @@ public:
         // =============================================================
 
         /// 'null' scattering event, i.e. particles do not undergo deflection
-        ENull                 = 0x00001,
-        /// Ideally diffuse reflection
-        EDiffuseReflection    = 0x00002,
-        /// Ideally diffuse transmission
-        EDiffuseTransmission  = 0x00004,
-        /// Glossy reflection
-        EGlossyReflection     = 0x00008,
-        /// Glossy transmission
-        EGlossyTransmission   = 0x00010,
+        ENull                  = 0x00001,
+        /// Radiation that undergoes scattering
+        EScatteredReflection   = 0x00002,
+        EScatteredTransmission = 0x00004,
+        /// Radiation that is specularly reflected/refracted into discrete lobes
+        EDirectReflection      = 0x00008,
+        EDirectTransmission    = 0x00010,
         /// Reflection into a discrete set of directions
-        EDeltaReflection      = 0x00020,
-        /// Transmission into a discrete set of directions
-        EDeltaTransmission    = 0x00040,
-        /// Reflection into a 1D space of directions
-        EDelta1DReflection    = 0x00080,
-        /// Transmission into a 1D space of directions
-        EDelta1DTransmission  = 0x00100,
+        // EDeltaReflection      = 0x00020,
+        // /// Transmission into a discrete set of directions
+        // EDeltaTransmission    = 0x00040,
+        // /// Reflection into a 1D space of directions
+        // EDelta1DReflection    = 0x00080,
+        // /// Transmission into a 1D space of directions
+        // EDelta1DTransmission  = 0x00100,
 
         // =============================================================
         //!                   Other lobe attributes
@@ -253,7 +266,7 @@ public:
         /// The BSDF depends on the UV coordinates
         ESpatiallyVarying     = 0x02000,
         /// Flags non-symmetry (e.g. transmission in dielectric materials)
-        ENonSymmetric         = 0x04000,
+        /* ENonSymmetric         = 0x04000, */
         /// Supports interactions on the front-facing side
         EFrontSide            = 0x08000,
         /// Supports interactions on the back-facing side
@@ -265,23 +278,19 @@ public:
     /// Convenient combinations of flags from \ref EBSDFType
     enum ETypeCombinations {
         /// Any reflection component (scattering into discrete, 1D, or 2D set of directions)
-        EReflection   = EDiffuseReflection | EDeltaReflection
-            | EDelta1DReflection | EGlossyReflection,
+        EReflection   = EScatteredReflection | EDirectReflection,
         /// Any transmission component (scattering into discrete, 1D, or 2D set of directions)
-        ETransmission = EDiffuseTransmission | EDeltaTransmission
-            | EDelta1DTransmission | EGlossyTransmission | ENull,
+        ETransmission = EScatteredTransmission | EDirectTransmission | ENull,
         /// Diffuse scattering into a 2D set of directions
-        EDiffuse      = EDiffuseReflection | EDiffuseTransmission,
+        EScattered    = EScatteredReflection | EScatteredTransmission,
         /// Non-diffuse scattering into a 2D set of directions
-        EGlossy       = EGlossyReflection | EGlossyTransmission,
+        EDirect       = EDirectReflection | EDirectTransmission,
         /// Scattering into a 2D set of directions
-        ESmooth       = EDiffuse | EGlossy,
+        ESmooth       = EScattered,
         /// Scattering into a discrete set of directions
-        EDelta        = ENull | EDeltaReflection | EDeltaTransmission,
-        /// Scattering into a 1D space of directions
-        EDelta1D      = EDelta1DReflection | EDelta1DTransmission,
+        EDelta        = ENull | EDirect,
         /// Any kind of scattering
-        EAll          = EDiffuse | EGlossy | EDelta | EDelta1D
+        EAll          = EDirect | ESmooth | EDelta
     };
 
     /// Return the number of components of this BSDF
@@ -315,8 +324,8 @@ public:
             return ESolidAngle;
         } else if (componentType & EDelta) {
             return EDiscrete;
-        } else if (componentType & EDelta1D) {
-            return ELength;
+        // } else if (componentType & EDelta1D) {
+        //     return ELength;
         } else {
             Log(EError, "getMeasure(): Invalid component type!");
             return ESolidAngle; // will never be reached
@@ -328,11 +337,6 @@ public:
         return (type & m_combinedType) != 0;
     }
 
-    /// Return whether this BSDF makes use of ray differentials
-    inline bool usesRayDifferentials() const {
-        return m_usesRayDifferentials;
-    }
-
     /// Return the diffuse reflectance value (if any)
     virtual Spectrum getDiffuseReflectance(const Intersection &its) const;
 
@@ -340,36 +344,13 @@ public:
     virtual Spectrum getSpecularReflectance(const Intersection &its) const {
         return Spectrum(0.0f);
     }
+    
+    virtual void getRefractiveIndex(const Intersection &its, Spectrum &n, Spectrum &k) const {
+        n = k = {};
+    }
 
     /**
-     * \brief Sample the BSDF and return the importance weight (i.e. the
-     * value of the BSDF divided by the probability density of the sample).
-     *
-     * When the probability density is not explicitly required, this function
-     * should be preferred, since it is potentially faster by making use of
-     * cancellations during the division.
-     *
-     * If a component mask or a specific component index is specified, the
-     * sample is drawn from the matching component, if it exists. Depending
-     * on the provided transport type, either the BSDF or its adjoint version
-     * is used.
-     *
-     * \param bRec    A BSDF query record
-     * \param sample  A uniformly distributed sample on \f$[0,1]^2\f$
-     *
-     * \return The BSDF value divided by the probability density of the sample
-     *         sample (multiplied by the cosine foreshortening factor when a
-     *         non-delta component is sampled) A zero spectrum means that
-     *         sampling failed.
-     *
-     * \remark This function is not exposed by the Python API. See the other
-     *         sample function instead.
-     *
-     */
-    virtual Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const = 0;
-
-    /**
-     * \brief Sample the BSDF and return the probability density \a and the
+     * \brief Sample the BSDF and return the
      * importance weight of the sample (i.e. the value of the BSDF divided
      * by the probability density)
      *
@@ -384,18 +365,14 @@ public:
      *
      * \param bRec    A BSDF query record
      * \param sample  A uniformly distributed sample on \f$[0,1]^2\f$
-     * \param pdf     Will record the probability with respect to solid angles
-     *                (or the discrete probability when a delta component is sampled)
      *
      * \return The BSDF value (multiplied by the cosine foreshortening
      *         factor when a non-delta component is sampled). A zero spectrum
      *         means that sampling failed.
-     *
-     * \remark From Python, this function is is called using the syntax
-     *         <tt>value, pdf = bsdf.sample(bRec, sample)</tt>
      */
-    virtual Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf,
-        const Point2 &sample) const = 0;
+    virtual Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const = 0;
+    
+    virtual Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure = ESolidAngle) const = 0;
 
     /**
      * \brief Evaluate the BSDF f(wi, wo) or its adjoint version f^{*}(wi, wo)
@@ -414,31 +391,20 @@ public:
      *     different measures. (E.g. a diffuse material with an
      *     ideally smooth dielectric coating).
      */
-    virtual Spectrum eval(const BSDFSamplingRecord &bRec,
-        EMeasure measure = ESolidAngle) const = 0;
-
-    /**
-     * \brief Compute the probability of sampling \c bRec.wo (given
-     * \c bRec.wi).
-     *
-     * This method provides access to the probability density that
-     * would result when supplying the same BSDF query record to the
-     * \ref sample() method. It correctly handles changes in probability
-     * when only a subset of the components is chosen for sampling
-     * (this can be done using the \ref BSDFSamplingRecord::component and
-     * \ref BSDFSamplingRecord::typeMask fields).
-     *
-     * \param bRec
-     *     A record with detailed information on the BSDF query
-     *
-     * \param measure
-     *     Specifies the measure of the component. This is necessary
-     *     to handle BSDFs, whose components live on spaces with
-     *     different measures. (E.g. a diffuse material with an
-     *     ideally smooth dielectric coating).
-     */
-    virtual Float pdf(const BSDFSamplingRecord &bRec,
-        EMeasure measure = ESolidAngle) const = 0;
+    virtual Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta,
+            EMeasure measure = ESolidAngle) const = 0;
+    inline Spectrum envelope(const BSDFSamplingRecord &bRec, EMeasure measure = ESolidAngle) const {
+        Float unused;
+        return envelope(bRec, unused, measure);
+    }
+    
+    virtual Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
+            RadiancePacket &rpp, EMeasure measure = ESolidAngle) const = 0;
+    inline Spectrum eval(const BSDFSamplingRecord &bRec, 
+            RadiancePacket &rpp, EMeasure measure = ESolidAngle) const {
+        Float unused;
+        return eval(bRec, unused, rpp, measure);
+    }
 
     /**
      * \brief For transmissive BSDFs: return the material's
@@ -538,7 +504,6 @@ protected:
 protected:
     std::vector<unsigned int> m_components;
     unsigned int m_combinedType;
-    bool m_usesRayDifferentials;
     bool m_ensureEnergyConservation;
 };
 

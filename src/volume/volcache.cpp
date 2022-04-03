@@ -23,6 +23,8 @@
 #include <mitsuba/core/lrucache.h>
 #include <fstream>
 
+#include <boost/bind.hpp>
+
 MTS_NAMESPACE_BEGIN
 
 static StatsCounter statsHitRate("Volume cache", "Cache hit rate", EPercentage);

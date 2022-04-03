@@ -1048,3 +1048,4 @@ void GLRenderer::debugString(const std::string &text) {
 
 MTS_IMPLEMENT_CLASS(GLRenderer, true, Renderer)
 MTS_NAMESPACE_END
+

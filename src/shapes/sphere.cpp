@@ -249,6 +249,8 @@ public:
             its.geoFrame.n *= -1;
 
         its.shFrame.n = its.geoFrame.n;
+        its.shFrame.s = its.geoFrame.s;
+        its.shFrame.t = its.geoFrame.t;
         its.hasUVPartials = false;
         its.instance = NULL;
         its.time = ray.time;
