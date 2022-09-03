@@ -31,7 +31,6 @@
 #include <mitsuba/render/shape.h>
 #include <mitsuba/core/constants.h>
 
-#include <mitsuba/plt/gaussianSurface.hpp>
 #include <mitsuba/plt/gaussianFractalSurface.hpp>
 
 #include "ior.h"
@@ -69,7 +68,7 @@ public:
         if (props.hasProperty("T"))
             gfs.T = props.getFloat("T");
         else 
-            gfs.T = 5.f/7.f * props.getFloat("sigma2",.0f) / (gfs.gamma+1);
+            gfs.T = props.getFloat("sigma2",.0f) / (gfs.gamma+1);
         gfs.sigma_h2 = q;
     }
 

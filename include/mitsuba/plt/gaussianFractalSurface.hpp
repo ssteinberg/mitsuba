@@ -27,7 +27,7 @@ struct gaussian_fractal_surface {
         static constexpr auto c1 = .5621f;
         const auto c2 = glm::pow<float>((gamma-1.f)/6.447f, 0.0735f);
         static constexpr auto c3 = 3.3016f;
-        return 1-c3+c3*(1-c2)*glm::exp(-.5f/c1*(glm::sqrt(e+c0)+glm::sqrt(c0)))+c3*c2;
+        return 1-c3+c3*(1-c2)*glm::exp(-.5f/c1*(glm::sqrt(e+c0)-glm::sqrt(c0)))+c3*c2;
     }
 
     inline auto pGF(const glm::vec2 &z, const glm::mat2 &Sigma) const {
@@ -43,7 +43,7 @@ struct gaussian_fractal_surface {
             glm::exp(-.5f * glm::dot(z, invHS*z));
         const auto f = 1.f/glm::pow(1+T*glm::dot(z,z), (gamma+1.f)/2.f);
         
-        return .5f * sigma_h2 / M_PI * (gamma-1) * T / N(e) * (beta*g + (1.f-beta)*f);
+        return M_PI * (gamma-1) * T / N(e) * (beta*g + (1.f-beta)*f);
     }
 
     inline auto alpha(const Float costhetai) const {
@@ -79,13 +79,13 @@ struct gaussian_fractal_surface {
         const float f = glm::sqrt(T * (glm::pow(1-M*u2d1.x, -2.f/(gamma-1)) - 1.f)); 
 
         const auto phi_max = f==.0f || s==.0f ? 
-            M_PI : 
+            float(M_PI) : 
             glm::acos(glm::clamp((sqr(f/k)+sqr(s)-1)/(2.f * (f/k) * s), -1.f,1.f));
         const auto phi_f = phi_i + (2.f*u2d1.y-1)*phi_max;
         const auto vf = f * glm::vec2{ glm::cos(phi_f),glm::sin(phi_f) };
 
         const auto g = glm::sqrt(-2.f*glm::log(u2d2.x));
-        const auto phi_g = 2.f * M_PI * u2d2.y;
+        const auto phi_g = 2.f * float(M_PI) * u2d2.y;
         const auto vg = g * glm::sqrt(.5f*(Sigma[0][0]+Sigma[1][1])) * glm::vec2{ glm::cos(phi_g),glm::sin(phi_g) };
 
         const auto zeta = vf+vg;
