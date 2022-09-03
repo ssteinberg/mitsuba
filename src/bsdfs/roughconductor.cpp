@@ -32,6 +32,7 @@
 #include <mitsuba/core/constants.h>
 
 #include <mitsuba/plt/gaussianSurface.hpp>
+#include <mitsuba/plt/gaussianFractalSurface.hpp>
 
 #include "ior.h"
 
@@ -63,14 +64,17 @@ public:
         m_eta = props.getSpectrum("eta", intEta) / extEta;
         m_k   = props.getSpectrum("k", intK) / extEta;
 
-        m_q = new ConstantFloatTexture(props.getFloat("q", .0f));
-        m_sigma2 = new ConstantFloatTexture(props.getFloat("sigma2", .0f));
+        const auto q = props.getFloat("q", .0f);
+        gfs.gamma = props.getFloat("gamma", 3.f);
+        if (props.hasProperty("T"))
+            gfs.T = props.getFloat("T");
+        else 
+            gfs.T = 5.f/7.f * props.getFloat("sigma2",.0f) / (gfs.gamma+1);
+        gfs.sigma_h2 = q;
     }
 
     Conductor(Stream *stream, InstanceManager *manager)
      : BSDF(stream, manager) {
-        m_q = static_cast<Texture *>(manager->getInstance(stream));
-        m_sigma2 = static_cast<Texture *>(manager->getInstance(stream));
         m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
         m_eta = Spectrum(stream);
         m_k = Spectrum(stream);
@@ -81,9 +85,6 @@ public:
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
-        manager->serialize(stream, m_q.get());
-        manager->serialize(stream, m_sigma2.get());
-        manager->serialize(stream, m_specularReflectance.get());
         m_eta.serialize(stream);
         m_k.serialize(stream);
     }
@@ -91,10 +92,8 @@ public:
     void configure() {
         unsigned int extraFlags = 0;
         unsigned int extraFlagsScattered = 0;
-        if (!m_q->isConstant() || !m_specularReflectance->isConstant())
+        if (!m_specularReflectance->isConstant())
             extraFlags |= ESpatiallyVarying;
-        if (!m_sigma2->isConstant())
-            extraFlagsScattered |= ESpatiallyVarying;
 
         m_components.clear();
         m_components.push_back(EDirectReflection | EFrontSide | extraFlags);
@@ -109,11 +108,7 @@ public:
 
     void addChild(const std::string &name, ConfigurableObject *child) {
         if (child->getClass()->derivesFrom(MTS_CLASS(Texture))) {
-            if (name == "q")
-                m_q = static_cast<Texture *>(child);
-            else if (name == "sigma2")
-                m_sigma2 = static_cast<Texture *>(child);
-            else if (name == "specularReflectance")
+            if (name == "specularReflectance")
                 m_specularReflectance = static_cast<Texture *>(child);
             else
                 BSDF::addChild(name, child);
@@ -141,9 +136,7 @@ public:
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto q = m_q->eval(bRec.its).average();
-        const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto a = gfs.alpha(Frame::cosTheta(bRec.wi));
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         
         if (!hasDirect && a.average()==1)
@@ -157,7 +150,7 @@ public:
         if (hasScattered) {
             const auto m = normalize(bRec.wo+bRec.wi);
             return (Spectrum(1.f)-a) * costheta_o * m00 * 
-                    gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, bRec.wo + bRec.wi) *
+                    gfs.envelopeScattered(*bRec.pltCtx, bRec.wo + bRec.wi) *
                     fresnelConductorApprox(dot(m,bRec.wi), m_eta, m_k);
         }
         return Spectrum(.0f);
@@ -180,9 +173,7 @@ public:
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto q = m_q->eval(bRec.its).average();
-        const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto a = gfs.alpha(Frame::cosTheta(bRec.wi));
         const auto m = normalize(bRec.wo+bRec.wi);
         const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
         const auto costheta_o = Frame::cosTheta(bRec.wo);
@@ -216,7 +207,7 @@ public:
                 const auto k = Spectrum::ks()[idx];
                 const auto h = k*(bRec.wo + bRec.wi);
                 const auto invSigma = rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f);
-                D = sqr(1/lambda) * gaussianSurface::diffract(invSigma, sigma2, Q,Qt, h);
+                D = sqr(1/lambda) * gfs.diffract(invSigma, Q,Qt, h);
             }
 
             auto L = m00[idx] * ((Matrix4x4)M * D*rpp.S(idx));
@@ -242,8 +233,7 @@ public:
 
         Float probDirect = hasDirect ? 1.0f : 0.0f;
         if (hasDirect && hasScattered) {
-            const auto q = m_q->eval(bRec.its).average();
-            probDirect = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
+            probDirect = gfs.alpha(Frame::cosTheta(bRec.wi)).average();
         }
 
         if (hasDirect && measure == EDiscrete) {
@@ -252,9 +242,8 @@ public:
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return probDirect;
         } else if (hasScattered && measure == ESolidAngle && probDirect<1) {
-            const auto sigma2 = m_sigma2->eval(bRec.its).average();
             return /* Frame::cosTheta(bRec.wo) */ 
-                gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, bRec.wo) * (1-probDirect);
+                gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, bRec.wo) * (1-probDirect);
         }
 
         return 0.0f;
@@ -272,9 +261,7 @@ public:
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto q = m_q->eval(bRec.its).average();
-        const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto a = gfs.alpha(Frame::cosTheta(bRec.wi));
         const auto costheta_o = Frame::cosTheta(bRec.wo);
 
         bRec.eta = 1.0f;
@@ -291,9 +278,9 @@ public:
             } else {
                 bRec.sampledComponent = 1;
                 bRec.sampledType = EScatteredReflection;
-                bRec.wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                bRec.wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
 
-                const auto pdf = (1-probDirect) * gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+                const auto pdf = (1-probDirect) * gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, bRec.wo);
                 if (pdf <= RCPOVERFLOW)
                     return Spectrum(.0f);
 
@@ -310,9 +297,9 @@ public:
         } else {
             bRec.sampledComponent = 1;
             bRec.sampledType = EScatteredReflection;
-            bRec.wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+            bRec.wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
 
-            const auto pdf = gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, bRec.wo);
+            const auto pdf = gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, bRec.wo);
             if (pdf <= RCPOVERFLOW)
                 return Spectrum(.0f);
 
@@ -334,8 +321,6 @@ public:
         std::ostringstream oss;
         oss << "Conductor[" << endl
             << "  id = \"" << getID() << "\"," << endl
-            << "  q = " << indent(m_q->toString()) << "," << endl
-            << "  sigma2 = " << indent(m_sigma2->toString()) << "," << endl
             << "  specularReflectance = " << indent(m_specularReflectance->toString()) << "," << endl
             << "  eta = " << m_eta.toString() << "," << endl
             << "  k = " << m_k.toString() << endl
@@ -346,8 +331,8 @@ public:
     MTS_DECLARE_CLASS()
 private:
     ref<Texture> m_specularReflectance;
-    ref<Texture> m_q, m_sigma2;
     Spectrum m_eta, m_k;
+    gaussian_fractal_surface gfs;
 };
 
 
