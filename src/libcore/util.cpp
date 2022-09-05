@@ -28,6 +28,8 @@
 #include <iomanip>
 #include <errno.h>
 
+#include <glm/glm.hpp>
+
 #if defined(__OSX__)
 #include <sys/sysctl.h>
 #include <mach/mach.h>
@@ -658,8 +660,8 @@ void fresnel_dielectric(Float cosThetaI_, Float eta, Float &rs, Float &rp, Float
 
     /* Using Snell's law, calculate the squared sine of the
        angle between the normal and the transmitted ray */
-    eta = (cosThetaI_ > 0) ? 1/eta : eta;
-    Float cosThetaTSqr = 1 - (1-cosThetaI_*cosThetaI_) * sqr(eta);
+    eta = (cosThetaI_ > 0) ? eta : 1/eta;
+    Float cosThetaTSqr = 1 - (1-sqr(cosThetaI_)) / sqr(eta);
 
     /* Find the absolute cosines of the incident/transmitted rays */
     Float cosThetaI = std::abs(cosThetaI_);
@@ -674,8 +676,8 @@ void fresnel_dielectric(Float cosThetaI_, Float eta, Float &rs, Float &rp, Float
 
 void fresnel_conductor(Float cosThetaI, const std::complex<Float>& eta, 
                        std::complex<Float>& rs, std::complex<Float>& rp) {
-    const auto iszero = eta == std::complex<Float>{ 0,0 };
-    if (EXPECT_NOT_TAKEN(iszero)) {
+    const bool inv = eta == std::complex<Float>{ 0,0 };
+    if (EXPECT_NOT_TAKEN(inv)) {
         rs = rp = 0;
         return;
     }
@@ -689,39 +691,43 @@ void fresnel_conductor(Float cosThetaI, const std::complex<Float>& eta,
     rp = (eta * i - t) / (eta * i + t);
 }
 
-Float fresnelDielectricExt(Float cosThetaI_, Float &cosThetaT_, Float eta) {
+Float fresnelDielectricExt(Float cosThetaI_, Float &cosThetaT, Float eta) {
     if (EXPECT_NOT_TAKEN(eta == 1)) {
-        cosThetaT_ = -cosThetaI_;
+        cosThetaT = -cosThetaI_;
         return 0.0f;
     }
 
     /* Using Snell's law, calculate the squared sine of the
        angle between the normal and the transmitted ray */
-    Float scale = (cosThetaI_ > 0) ? 1/eta : eta,
-          cosThetaTSqr = 1 - (1-cosThetaI_*cosThetaI_) * (scale*scale);
+    eta = (cosThetaI_ > 0) ? eta : 1/eta;
+    Float cosThetaTSqr = 1 - (1-sqr(cosThetaI_)) / sqr(eta);
 
     /* Check for total internal reflection */
     if (cosThetaTSqr <= 0.0f) {
-        cosThetaT_ = 0.0f;
+        cosThetaT = 0.0f;
         return 1.0f;
     }
 
     /* Find the absolute cosines of the incident/transmitted rays */
     Float cosThetaI = std::abs(cosThetaI_);
-    Float cosThetaT = std::sqrt(cosThetaTSqr);
+    cosThetaT = std::sqrt(cosThetaTSqr);
 
     Float Rs = (cosThetaI - eta * cosThetaT)
              / (cosThetaI + eta * cosThetaT);
     Float Rp = (eta * cosThetaI - cosThetaT)
              / (eta * cosThetaI + cosThetaT);
 
-    cosThetaT_ = (cosThetaI_ > 0) ? -cosThetaT : cosThetaT;
+    cosThetaT *= -glm::sign(cosThetaI_);
 
     /* No polarization -- return the unpolarized reflectance */
     return 0.5f * (Rs * Rs + Rp * Rp);
 }
 
 Float fresnelConductorApprox(Float cosThetaI, Float eta, Float k) {
+    const bool inv = eta==0 && k==0;
+    if (EXPECT_NOT_TAKEN(inv))
+        return .0f;
+
     Float cosThetaI2 = cosThetaI*cosThetaI;
 
     Float tmp = (eta*eta + k*k) * cosThetaI2;

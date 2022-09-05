@@ -65,8 +65,8 @@ auto MuellerPolarizer(T theta) noexcept {
 // Mueller Fresnel matrices
 template <typename T>
 auto MuellerFresnel(const T &fs, const T &fp) noexcept {
-    const auto Rp = sqr(std::abs(fp));
-    const auto Rs = sqr(std::abs(fs));
+    const auto Rp = sqr(std::fabs(fp));
+    const auto Rs = sqr(std::fabs(fs));
     const auto m00 = (Rp+Rs)/2;
     const auto m01 = (Rp-Rs)/2;
     const auto m22 = std::real(fs*std::conj(fp));
@@ -78,8 +78,8 @@ auto MuellerFresnel(const T &fs, const T &fp) noexcept {
 }
 template <typename T>
 auto invOneMinusMuellerFresnel(const T &fs, const T &fp) noexcept {
-    const auto Rp = sqr(std::abs(fp));
-    const auto Rs = sqr(std::abs(fs));
+    const auto Rp = sqr(std::fabs(fp));
+    const auto Rs = sqr(std::fabs(fs));
     const auto m00 = (Rp+Rs)/2;
     const auto m01 = (Rp-Rs)/2;
     const auto m22 = std::real(fs*std::conj(fp));
@@ -148,8 +148,8 @@ inline fresnel_spm_order1_data fresnel_spm_order1(float cos_theta_i, float cos_t
     if (cos_theta_i<.0f) 
         eta = c_t(1) / eta;
     const float reta = real(eta);
-    cos_theta_i = abs(cos_theta_i);
-    cos_theta_o = abs(cos_theta_o);
+    cos_theta_i = fabs(cos_theta_i);
+    cos_theta_o = fabs(cos_theta_o);
     const float sin_theta_i = sqrt(max(.0f, 1.f - sqr(cos_theta_i)));
     const float sin_theta_o = sqrt(max(.0f, 1.f - sqr(cos_theta_o)));
     

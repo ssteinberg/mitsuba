@@ -128,7 +128,11 @@ public:
     }
     // Cheap lame approximation
     inline Vector scattered_wo(const Vector &wo) const {
-        return -reflect(wo);//reflect(refract(wo));
+        const float scale = wo.z>0 ? 1.f/m_eta : m_eta;
+        const auto xy = scale * glm::vec2{ wo.x, wo.y };
+        const float l2 = glm::dot(xy,xy);
+        if (l2>1.f) return { 0,0,0 };
+        return { xy.x,xy.y, -glm::sign(wo.z)*std::sqrt(std::max(.0f,1-l2)) };
     }
     
     Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
@@ -142,7 +146,7 @@ public:
         const auto costheta_o = Frame::cosTheta(bRec.wo);
         const auto isReflection = costheta_i * costheta_o > 0;
 
-        if ((!hasDirect && !hasScattered) || costheta_i == 0 ||
+        if ((!hasDirect && !hasScattered) || costheta_i == 0 || 
             (isReflection && bRec.component != -1 && bRec.component != 0 && bRec.component != 2))
             return Spectrum(0.0f);
         
@@ -154,24 +158,20 @@ public:
 
         if (!hasDirect && a.average()==1)
             return Spectrum(.0f);
-
-        const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
-        Assert(wo.z*bRec.wi.z>=.0f);
-        
-        if (wo.z == 0)
-            return Spectrum(.0f);
         
         eta = isReflection ? 1.0f : bRec.wo.z<.0f ? m_eta : m_invEta;
         if (hasDirect) {
             Float costheta_t;
             const auto Fr = fresnelDielectricExt(costheta_i,costheta_t,m_eta);
 
-            if (isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
+            if (isReflection  && std::fabs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return Fr * a * m00;
-            if (!isReflection && std::abs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) < DeltaEpsilon)
+            if (!isReflection && std::fabs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) < DeltaEpsilon)
                 return (1-Fr) * a * m00;
         }
         if (hasScattered) {
+            const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
+            Assert(wo.z*bRec.wi.z>=.0f);
             const auto h = bRec.wi + wo;
             const auto m = normalize(h);
             const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
@@ -210,8 +210,6 @@ public:
         const auto phii = std::fabs(costheta_i)<1.f ? std::atan2(bRec.wi.y,bRec.wi.x) : .0f;
         const auto phio = std::fabs(costheta_o)<1.f ? std::atan2(bRec.wo.y,bRec.wo.x) : .0f;
         
-        if (wo.z == 0)
-            return Spectrum(.0f);
         Assert(wo.z*bRec.wi.z>=.0f);
         
         if (!hasDirect && a.average() >= 1-Epsilon)
@@ -220,10 +218,12 @@ public:
             Float costheta_t;
             fresnelDielectricExt(costheta_i,costheta_t,m_eta);
 
-            if ((isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon) ||
-                (!isReflection && std::abs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) >= DeltaEpsilon))
+            if ((isReflection  && std::fabs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon) ||
+                (!isReflection && std::fabs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) >= DeltaEpsilon))
                 return Spectrum(.0f);
         }
+        else if (wo.z == 0)
+            return Spectrum(.0f);
         
         const auto fi = rpp.f;
         Matrix3x3 Q = Matrix3x3(bRec.its.toLocal(fi.s),
@@ -236,8 +236,7 @@ public:
 
         const auto k = Spectrum::ks().average();
         const auto D = !hasDirect ? 
-                       gfs.diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                                                 Q,Qt, k*h) : .0f;
+                       gfs.diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), Q,Qt, k*h) : 1.f;
         const auto M = !hasDirect ? 
                     MuellerFresnelspm1(costheta_i, costheta_o, phii, phio, m_eta, isReflection) :
                     MuellerFresnelDielectric(costheta_i, m_eta, isReflection);
@@ -245,10 +244,10 @@ public:
         const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
-            auto L = m00[idx]*((Matrix4x4)M * rpp.S(idx));
+            auto L = m00[idx]*((Matrix4x4)M * D*rpp.S(idx));
             L *= hasDirect ?
                 a[idx] :
-                (std::fabs(costheta_o) * (1-a[idx]) * D);
+                (std::fabs(costheta_o) * (1-a[idx]));
 
             if (L.x<=.0f) {
                 L = {};
@@ -257,8 +256,8 @@ public:
             else {
                 if (in[idx]>RCPOVERFLOW)
                     result[idx] = L[0] / in[idx];
-                rpp.L(idx) = L;
             }
+            rpp.L(idx) = L;
         }
 
         eta = isReflection ? 1.0f : bRec.wo.z<.0f ? m_eta : m_invEta;
@@ -298,15 +297,15 @@ public:
             if (hasReflection && hasTransmission)
                 F = isReflection ? Fr : 1.f-Fr;
 
-            if ((isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon) ||
-                (!isReflection && std::abs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) < DeltaEpsilon))
+            if ((isReflection  && std::fabs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon) ||
+                (!isReflection && std::fabs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) < DeltaEpsilon))
                 return probDirect*F;
         } else if (hasScattered && measure == ESolidAngle && probDirect<1) {
             auto wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
-            if (wo.z*bRec.wi.z<.0f)
-                wo.z *= -1.f;
             if (wo.z == 0)
                 return .0f;
+            Assert(wo.z*bRec.wi.z>=.0f);
+
             const auto h = bRec.wi + wo;
             const auto m = normalize(h);
             
@@ -332,16 +331,14 @@ public:
                 && (bRec.component == -1 || bRec.component == 1 || bRec.component == 3);
 
         const auto costheta_i = Frame::cosTheta(bRec.wi);
-        const auto costheta_o = Frame::cosTheta(bRec.wo);
-        if (costheta_i == 0 || (!hasReflection && !hasTransmission)
-             || (!hasDirect && !hasScattered))
+        if (costheta_i == 0 || (!hasReflection && !hasTransmission) || (!hasDirect && !hasScattered))
             return Spectrum(.0f);
 
         Assert(!!bRec.pltCtx);
         
         Float costheta_t;
         const auto Fr = fresnelDielectricExt(costheta_i,costheta_t,m_eta);
-        const auto a = gfs.alpha(costheta_i, costheta_o);
+        const auto a = gfs.alpha(costheta_i, costheta_i);
         
         Vector3 wo;
         
@@ -365,8 +362,8 @@ public:
             }
             else {
                 wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
-                if (wo.z*bRec.wi.z<.0f)
-                    wo.z *= -1.f;
+                Assert(wo.z*bRec.wi.z>=.0f);
+
                 pdf *= gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo);
                 
                 const auto h = bRec.wi + wo;
@@ -377,9 +374,8 @@ public:
                 if (!isReflection)
                     wo = scattered_wo(wo);
                 
-                const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
-                                                m_specularTransmittance->eval(bRec.its);
-                weight *= std::fabs(costheta_o) * (Spectrum(1.f)-a) * m00;
+                const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : m_specularTransmittance->eval(bRec.its);
+                weight *= std::fabs(wo.z) * (Spectrum(1.f)-a) * m00;
             }
         }
         else if (hasReflection) {
@@ -390,14 +386,14 @@ public:
             }
             else {
                 wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
-                if (wo.z*bRec.wi.z<.0f)
-                    wo.z *= -1.f;
+                Assert(wo.z*bRec.wi.z>=.0f);
+
                 pdf *= gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo);
 
                 const auto h = bRec.wi + wo;
                 const auto m = normalize(h);
                 const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
-                weight *= std::fabs(costheta_o) * (Spectrum(1.f)-a) * m00 * r;
+                weight *= std::fabs(wo.z) * (Spectrum(1.f)-a) * m00 * r;
             }
         }
         else {
@@ -408,8 +404,8 @@ public:
             }
             else {
                 wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
-                if (wo.z*bRec.wi.z<.0f)
-                    wo.z *= -1.f;
+                Assert(wo.z*bRec.wi.z>=.0f);
+
                 pdf *= gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo);
                 
                 const auto h = bRec.wi + wo;
@@ -417,7 +413,7 @@ public:
                 const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
                 
                 wo = scattered_wo(wo);
-                weight *= std::fabs(costheta_o) * (Spectrum(1.f)-a) * m00 * (1-r);
+                weight *= std::fabs(wo.z) * (Spectrum(1.f)-a) * m00 * (1-r);
             }
         }
         

@@ -48,7 +48,7 @@ struct gaussian_fractal_surface {
 
     inline auto alpha(const Float costhetai, const Float costhetao) const {
         const auto q = sigma_h2;
-        const auto a = -sqr((abs(costhetai)+abs(costhetao)) * q) * Spectrum::ks() * Spectrum::ks();
+        const auto a = -sqr((std::fabs(costhetai)+std::fabs(costhetao)) * q) * Spectrum::ks() * Spectrum::ks();
         return a.exp();
     }
 
@@ -92,7 +92,7 @@ struct gaussian_fractal_surface {
         const auto wo = zeta/k - glm::vec2{ wi.x,wi.y };
 
         const auto z = glm::sqrt(glm::max(.0f,1-glm::dot(wo,wo)));
-        return Vector{ wo.x,wo.y,z };
+        return Vector{ wo.x,wo.y,glm::sign(wi.z)*z };
     }
 
     auto scatteredPdf(const PLTContext &pltCtx, const Vector3 &wi, const Vector3 &wo) const {
