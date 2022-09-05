@@ -77,6 +77,9 @@ public:
         m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
         m_eta = Spectrum(stream);
         m_k = Spectrum(stream);
+        gfs.gamma = stream->readFloat();
+        gfs.T = stream->readFloat();
+        gfs.sigma_h2 = stream->readFloat();
 
         configure();
     }
@@ -86,6 +89,9 @@ public:
 
         m_eta.serialize(stream);
         m_k.serialize(stream);
+        stream->writeFloat(gfs.gamma);
+        stream->writeFloat(gfs.T);
+        stream->writeFloat(gfs.sigma_h2);
     }
 
     void configure() {
@@ -128,15 +134,15 @@ public:
                 && (bRec.component == -1 || bRec.component == 1)
                 && measure == ESolidAngle;
 
-        if ((!hasDirect && !hasScattered)
-            || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        if ((!hasDirect && !hasScattered) || costheta_o <= 0 || costheta_i <= 0)
             return Spectrum(0.0f);
         
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto a = gfs.alpha(Frame::cosTheta(bRec.wi));
-        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto a = gfs.alpha(costheta_i, costheta_o);
         
         if (!hasDirect && a.average()==1)
             return Spectrum(.0f);
@@ -144,7 +150,7 @@ public:
         if (hasDirect) {
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return a * m00 *
-                    fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
+                    fresnelConductorApprox(costheta_i, m_eta, m_k);
         }
         if (hasScattered) {
             const auto m = normalize(bRec.wo+bRec.wi);
@@ -164,18 +170,19 @@ public:
                 && (bRec.component == -1 || bRec.component == 1)
                 && measure == ESolidAngle;
 
-        if ((!hasDirect && !hasScattered)
-            || Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        if ((!hasDirect && !hasScattered) || costheta_o <= 0 || costheta_i <= 0)
             return Spectrum(0.0f);
         
         Assert(bRec.mode==EImportance && rpp.isValid());
         Assert(!!bRec.pltCtx);
         
-        const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto a = gfs.alpha(Frame::cosTheta(bRec.wi));
-        const auto m = normalize(bRec.wo+bRec.wi);
         const auto rcp_max_lambda = 1.f/Spectrum::lambdas().max();
-        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto m00 = m_specularReflectance->eval(bRec.its);
+        const auto a = gfs.alpha(costheta_i, costheta_o);
+        const auto phii = bRec.wi.z<1.f ? std::atan2(bRec.wi.y,bRec.wi.x) : .0f;
+        const auto phio = bRec.wo.z<1.f ? std::atan2(bRec.wo.y,bRec.wo.x) : .0f;
         
         if (!hasDirect && a.average() >= 1-Epsilon)
             return Spectrum(.0f);
@@ -195,18 +202,21 @@ public:
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
             // Mueller Fresnel pBSDF
-            const auto lambda = Spectrum::lambdas()[idx] * rcp_max_lambda;
+            const auto eta = std::complex<Float>(m_eta[idx],m_k[idx]);
+
             const auto M = hasDirect ? 
-                           MuellerFresnelRConductor(Frame::cosTheta(bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx])) :
-                           MuellerFresnelRConductor(dot(m,bRec.wi), std::complex<Float>(m_eta[idx],m_k[idx]));
+                           MuellerFresnelRConductor(costheta_i, eta) :
+                           MuellerFresnelRspm1(costheta_i, 1.f, phii, phio, eta);
+                        //    MuellerFresnelRConductor(dot(normalize(bRec.wo+bRec.wi),bRec.wi), eta);
 
             // Diffraction
             auto D = 1.f;
             if (!hasDirect) {
+                const auto lambda = Spectrum::lambdas()[idx] * rcp_max_lambda;
                 const auto k = Spectrum::ks()[idx];
-                const auto h = k*(bRec.wo + bRec.wi);
+                const auto h = bRec.wo + bRec.wi;
                 const auto invSigma = rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f);
-                D = sqr(1/lambda) * gfs.diffract(invSigma, Q,Qt, h);
+                D = sqr(1/lambda) * gfs.diffract(invSigma, Q,Qt, k*h);
             }
 
             auto L = m00[idx] * ((Matrix4x4)M * D*rpp.S(idx));
@@ -225,14 +235,17 @@ public:
         const auto hasScattered = (bRec.typeMask & EScatteredReflection)
                 && (bRec.component == -1 || bRec.component == 1);
 
-        if (Frame::cosTheta(bRec.wo) <= 0 || Frame::cosTheta(bRec.wi) <= 0)
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        if (costheta_o <= 0 || costheta_i <= 0)
             return .0f;
 
         Assert(!!bRec.pltCtx);
 
         Float probDirect = hasDirect ? 1.0f : 0.0f;
         if (hasDirect && hasScattered) {
-            probDirect = gfs.alpha(Frame::cosTheta(bRec.wi)).average();
+            const auto a = gfs.alpha(costheta_i, costheta_o);
+            probDirect = a.average();
         }
 
         if (hasDirect && measure == EDiscrete) {
@@ -241,7 +254,7 @@ public:
             if (std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return probDirect;
         } else if (hasScattered && measure == ESolidAngle && probDirect<1) {
-            return /* Frame::cosTheta(bRec.wo) */ 
+            return /* costheta_o */ 
                 gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, bRec.wo) * (1-probDirect);
         }
 
@@ -254,14 +267,15 @@ public:
         const auto hasScattered = (bRec.typeMask & EScatteredReflection)
                 && (bRec.component == -1 || bRec.component == 1);
 
-        if ((!hasScattered && !hasDirect) || Frame::cosTheta(bRec.wi) <= 0)
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        if ((!hasScattered && !hasDirect) || costheta_i <= 0)
             return Spectrum(0.0f);
 
         Assert(!!bRec.pltCtx);
         
         const auto m00 = m_specularReflectance->eval(bRec.its);
-        const auto a = gfs.alpha(Frame::cosTheta(bRec.wi));
-        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto a = gfs.alpha(costheta_i, costheta_o);
 
         bRec.eta = 1.0f;
         if (hasScattered && hasDirect) {
@@ -273,7 +287,7 @@ public:
                 bRec.wo = reflect(bRec.wi);
 
                 return 1.f/probDirect * a * m00 *
-                    fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
+                    fresnelConductorApprox(costheta_i, m_eta, m_k);
             } else {
                 bRec.sampledComponent = 1;
                 bRec.sampledType = EScatteredReflection;
@@ -292,7 +306,7 @@ public:
             bRec.sampledType = EDirectReflection;
             bRec.wo = reflect(bRec.wi);
             return a * m00 *
-                fresnelConductorApprox(Frame::cosTheta(bRec.wi), m_eta, m_k);
+                fresnelConductorApprox(costheta_i, m_eta, m_k);
         } else {
             bRec.sampledComponent = 1;
             bRec.sampledType = EScatteredReflection;

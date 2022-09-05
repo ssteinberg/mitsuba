@@ -46,9 +46,9 @@ struct gaussian_fractal_surface {
         return M_PI * (gamma-1) * T / N(e) * (beta*g + (1.f-beta)*f);
     }
 
-    inline auto alpha(const Float costhetai) const {
+    inline auto alpha(const Float costhetai, const Float costhetao) const {
         const auto q = sigma_h2;
-        const auto a = -sqr(costhetai * q) * Spectrum::ks() * Spectrum::ks();
+        const auto a = -sqr((abs(costhetai)+abs(costhetao)) * q) * Spectrum::ks() * Spectrum::ks();
         return a.exp();
     }
 
@@ -78,9 +78,9 @@ struct gaussian_fractal_surface {
         const float M = 1.f - glm::pow(1+sqr(k)*T*sqr(1+s), -(gamma-1)/2.f);
         const float f = glm::sqrt(T * (glm::pow(1-M*u2d1.x, -2.f/(gamma-1)) - 1.f)); 
 
-        const auto phi_max = f==.0f || s==.0f ? 
-            float(M_PI) : 
-            glm::acos(glm::clamp((sqr(f/k)+sqr(s)-1)/(2.f * (f/k) * s), -1.f,1.f));
+        const auto phi_max = //f==.0f || s==.0f ? 
+            float(M_PI);
+            //: glm::acos(glm::clamp((sqr(f/k)+sqr(s)-1)/(2.f * (f/k) * s), -1.f,1.f));
         const auto phi_f = phi_i + (2.f*u2d1.y-1)*phi_max;
         const auto vf = f * glm::vec2{ glm::cos(phi_f),glm::sin(phi_f) };
 
@@ -101,7 +101,7 @@ struct gaussian_fractal_surface {
         const auto k = Spectrum::ks().average();
 
         const auto kh = k*(wi+wo);
-        return glm::abs(wo.z) * pGF({kh.x,kh.y}, Sigma) / sigma_h2;
+        return pGF({kh.x,kh.y}, Sigma);
     }
 
     inline Float diffract(const Matrix3x3& invSigma, const Matrix3x3 &Q, const Matrix3x3 &Qt, const Vector3 &h) const {

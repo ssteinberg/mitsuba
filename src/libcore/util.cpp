@@ -16,6 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <complex>
 #include <mitsuba/mitsuba.h>
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/random.h>

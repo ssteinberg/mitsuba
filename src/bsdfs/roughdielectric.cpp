@@ -25,8 +25,9 @@
 #include "mitsuba/plt/mueller.hpp"
 #include "mitsuba/render/common.h"
 #include <mitsuba/plt/plt.hpp>
-#include <mitsuba/plt/gaussianSurface.hpp>
 #include "ior.h"
+
+#include <mitsuba/plt/gaussianFractalSurface.hpp>
 
 MTS_NAMESPACE_BEGIN
 
@@ -48,17 +49,24 @@ public:
         m_eta = intIOR / extIOR;
         m_invEta = 1.f / m_eta;
 
-        m_q = new ConstantFloatTexture(props.getFloat("q", .0f));
-        m_sigma2 = new ConstantFloatTexture(props.getFloat("sigma2", .0f));
+        const auto q = props.getFloat("q", .0f);
+        gfs.gamma = props.getFloat("gamma", 3.f);
+        if (props.hasProperty("T"))
+            gfs.T = props.getFloat("T");
+        else 
+            gfs.T = props.getFloat("sigma2",.0f) / (gfs.gamma+1);
+        gfs.sigma_h2 = q;
     }
 
     Dielectric(Stream *stream, InstanceManager *manager)
      : BSDF(stream, manager) {
-        m_q = static_cast<Texture *>(manager->getInstance(stream));
-        m_sigma2 = static_cast<Texture *>(manager->getInstance(stream));
         m_specularReflectance = static_cast<Texture *>(manager->getInstance(stream));
         m_specularTransmittance = static_cast<Texture *>(manager->getInstance(stream));
         m_eta = stream->readFloat();
+        gfs.gamma = stream->readFloat();
+        gfs.T = stream->readFloat();
+        gfs.sigma_h2 = stream->readFloat();
+
         m_invEta = 1.f / m_eta;
 
         configure();
@@ -67,20 +75,19 @@ public:
     void serialize(Stream *stream, InstanceManager *manager) const {
         BSDF::serialize(stream, manager);
 
-        manager->serialize(stream, m_q.get());
-        manager->serialize(stream, m_sigma2.get());
         manager->serialize(stream, m_specularReflectance.get());
         manager->serialize(stream, m_specularTransmittance.get());
         stream->writeFloat(m_eta);
+        stream->writeFloat(gfs.gamma);
+        stream->writeFloat(gfs.T);
+        stream->writeFloat(gfs.sigma_h2);
     }
 
     void configure() {
         unsigned int extraFlags = 0;
         unsigned int extraFlagsScattered = 0;
-        if (!m_q->isConstant() || !m_specularReflectance->isConstant())
+        if (!m_specularReflectance->isConstant())
             extraFlags |= ESpatiallyVarying;
-        if (!m_sigma2->isConstant())
-            extraFlagsScattered |= ESpatiallyVarying;
 
         m_components.clear();
         m_components.push_back(EDirectReflection | EFrontSide | EBackSide | extraFlags);
@@ -101,11 +108,7 @@ public:
 
     void addChild(const std::string &name, ConfigurableObject *child) {
         if (child->getClass()->derivesFrom(MTS_CLASS(Texture))) {
-            if (name == "q")
-                m_q = static_cast<Texture *>(child);
-            else if (name == "sigma2")
-                m_sigma2 = static_cast<Texture *>(child);
-            else if (name == "specularReflectance")
+            if (name == "specularReflectance")
                 m_specularReflectance = static_cast<Texture *>(child);
             else if (name == "specularTransmittance")
                 m_specularTransmittance = static_cast<Texture *>(child);
@@ -135,9 +138,11 @@ public:
         const auto hasScattered = (bRec.typeMask & EScattered)
                 && (bRec.component == -1 || bRec.component == 2 || bRec.component == 3)
                 && measure == ESolidAngle;
-        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) > 0;
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto isReflection = costheta_i * costheta_o > 0;
 
-        if ((!hasDirect && !hasScattered) || Frame::cosTheta(bRec.wi) == 0 ||
+        if ((!hasDirect && !hasScattered) || costheta_i == 0 ||
             (isReflection && bRec.component != -1 && bRec.component != 0 && bRec.component != 2))
             return Spectrum(0.0f);
         
@@ -145,15 +150,13 @@ public:
         
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                         m_specularTransmittance->eval(bRec.its);
-        const auto q = m_q->eval(bRec.its).average();
-        const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
+        const auto a = gfs.alpha(costheta_i, costheta_o);
 
         if (!hasDirect && a.average()==1)
             return Spectrum(.0f);
 
-        const auto costheta_o = std::fabs(Frame::cosTheta(bRec.wo));
         const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
+        Assert(wo.z*bRec.wi.z>=.0f);
         
         if (wo.z == 0)
             return Spectrum(.0f);
@@ -161,7 +164,7 @@ public:
         eta = isReflection ? 1.0f : bRec.wo.z<.0f ? m_eta : m_invEta;
         if (hasDirect) {
             Float costheta_t;
-            const auto Fr = fresnelDielectricExt(Frame::cosTheta(bRec.wi),costheta_t,m_eta);
+            const auto Fr = fresnelDielectricExt(costheta_i,costheta_t,m_eta);
 
             if (isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon)
                 return Fr * a * m00;
@@ -171,11 +174,11 @@ public:
         if (hasScattered) {
             const auto h = bRec.wi + wo;
             const auto m = normalize(h);
-            const auto r = fresnelDielectricExt(dot(bRec.wi,m),m_eta);
+            const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
 
-            return costheta_o * (isReflection ? r : 1.f-r) *
+            return std::fabs(costheta_o) * (isReflection ? r : 1.f-r) *
                     (Spectrum(1.f)-a) * m00 * 
-                    gaussianSurface::envelopeScattered(sigma2, *bRec.pltCtx, h);
+                    gfs.envelopeScattered(*bRec.pltCtx, h);
         }
         return Spectrum(.0f);
     }
@@ -188,9 +191,11 @@ public:
         const auto hasScattered = (bRec.typeMask & EScattered)
                 && (bRec.component == -1 || bRec.component == 2 || bRec.component == 3)
                 && measure == ESolidAngle;
-        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) > 0;
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto isReflection = costheta_i * costheta_o > 0;
 
-        if ((!hasDirect && !hasScattered) || Frame::cosTheta(bRec.wi) == 0 ||
+        if ((!hasDirect && !hasScattered) || costheta_i == 0 ||
             (isReflection && bRec.component != -1 && bRec.component != 0 && bRec.component != 2))
             return Spectrum(0.0f);
         
@@ -199,14 +204,11 @@ public:
         
         const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                         m_specularTransmittance->eval(bRec.its);
-        const auto q = m_q->eval(bRec.its).average();
-        const auto sigma2 = m_sigma2->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
-
-        const auto costheta_o = std::fabs(Frame::cosTheta(bRec.wo));
-        const auto& wo = isReflection ? bRec.wo : -reflect(bRec.wo);
+        const auto a = gfs.alpha(costheta_i, costheta_o);
+        const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
         const auto h = bRec.wi + wo;
-        const auto m = normalize(h);
+        const auto phii = std::fabs(costheta_i)<1.f ? std::atan2(bRec.wi.y,bRec.wi.x) : .0f;
+        const auto phio = std::fabs(costheta_o)<1.f ? std::atan2(bRec.wo.y,bRec.wo.x) : .0f;
         
         if (wo.z == 0)
             return Spectrum(.0f);
@@ -216,7 +218,7 @@ public:
             return Spectrum(.0f);
         if (hasDirect) {
             Float costheta_t;
-            fresnelDielectricExt(Frame::cosTheta(bRec.wi),costheta_t,m_eta);
+            fresnelDielectricExt(costheta_i,costheta_t,m_eta);
 
             if ((isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) >= DeltaEpsilon) ||
                 (!isReflection && std::abs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) >= DeltaEpsilon))
@@ -234,23 +236,29 @@ public:
 
         const auto k = Spectrum::ks().average();
         const auto D = !hasDirect ? 
-                       gaussianSurface::diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
-                                                 sigma2, Q,Qt, k*h) : .0f;
+                       gfs.diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), 
+                                                 Q,Qt, k*h) : .0f;
         const auto M = !hasDirect ? 
-                       MuellerFresnelDielectric(dot(bRec.wi,m), m_eta, isReflection) :
-                       MuellerFresnelDielectric(Frame::cosTheta(bRec.wi), m_eta, isReflection);
+                    MuellerFresnelspm1(costheta_i, costheta_o, phii, phio, m_eta, isReflection) :
+                    MuellerFresnelDielectric(costheta_i, m_eta, isReflection);
         
         const auto in = rpp.spectrum();
         Spectrum result = Spectrum(.0f);
         for (std::size_t idx=0; idx<rpp.size(); ++idx) {
-            auto L = m00[idx] * ((Matrix4x4)M * rpp.S(idx));
+            auto L = m00[idx]*((Matrix4x4)M * rpp.S(idx));
             L *= hasDirect ?
                 a[idx] :
-                (costheta_o * (1-a[idx]) * D);
+                (std::fabs(costheta_o) * (1-a[idx]) * D);
 
-            if (in[idx]>RCPOVERFLOW)
-                result[idx] = L[0] / in[idx];
-            rpp.L(idx) = L;
+            if (L.x<=.0f) {
+                L = {};
+                result[idx] = .0f;
+            }
+            else {
+                if (in[idx]>RCPOVERFLOW)
+                    result[idx] = L[0] / in[idx];
+                rpp.L(idx) = L;
+            }
         }
 
         eta = isReflection ? 1.0f : bRec.wo.z<.0f ? m_eta : m_invEta;
@@ -266,9 +274,11 @@ public:
                 && (bRec.component == -1 || bRec.component == 0 || bRec.component == 2);
         const auto hasTransmission = (bRec.typeMask & ETransmission)
                 && (bRec.component == -1 || bRec.component == 1 || bRec.component == 3);
-        const auto isReflection = Frame::cosTheta(bRec.wi) * Frame::cosTheta(bRec.wo) > 0;
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        const auto isReflection = costheta_i * costheta_o > 0;
 
-        if (Frame::cosTheta(bRec.wi) == 0 || (!hasReflection && !hasTransmission) || (!hasDirect && !hasScattered) 
+        if (costheta_i == 0 || (!hasReflection && !hasTransmission) || (!hasDirect && !hasScattered) 
                 || (isReflection && !hasReflection)|| (!isReflection && !hasTransmission))
             return .0f;
 
@@ -276,13 +286,13 @@ public:
 
         Float probDirect = hasDirect ? 1.f : .0f;
         if (hasDirect && hasScattered) {
-            const auto q = m_q->eval(bRec.its).average();
-            probDirect = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q).average();
+            const auto a = gfs.alpha(costheta_i, costheta_o);
+            probDirect = a.average();
         }
 
-        if (hasDirect && measure == EDiscrete) {
+        if (hasDirect && measure == EDiscrete && probDirect>0) {
             Float costheta_t;
-            const auto Fr = fresnelDielectricExt(Frame::cosTheta(bRec.wi),costheta_t,m_eta);
+            const auto Fr = fresnelDielectricExt(costheta_i,costheta_t,m_eta);
 
             Float F = 1.f;
             if (hasReflection && hasTransmission)
@@ -290,22 +300,22 @@ public:
 
             if ((isReflection  && std::abs(dot(reflect(bRec.wi), bRec.wo)-1) < DeltaEpsilon) ||
                 (!isReflection && std::abs(dot(refract(bRec.wi, costheta_t), bRec.wo)-1) < DeltaEpsilon))
-                return F * probDirect;
+                return probDirect*F;
         } else if (hasScattered && measure == ESolidAngle && probDirect<1) {
-            const auto& wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
+            auto wo = isReflection ? bRec.wo : scattered_wo(bRec.wo);
+            if (wo.z*bRec.wi.z<.0f)
+                wo.z *= -1.f;
             if (wo.z == 0)
                 return .0f;
-            const auto sigma2 = m_sigma2->eval(bRec.its).average();
             const auto h = bRec.wi + wo;
             const auto m = normalize(h);
             
-            const auto r = fresnelDielectricExt(dot(bRec.wi,m),m_eta);
+            const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
             Float F = 1.f;
             if (hasReflection && hasTransmission)
                 F = isReflection ? r : 1.f-r;
             
-            return gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo) * 
-                F * (1-probDirect);
+            return gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo) * (1-probDirect) * F;
         }
 
         return .0f;
@@ -321,17 +331,17 @@ public:
         const auto hasTransmission = (bRec.typeMask & ETransmission)
                 && (bRec.component == -1 || bRec.component == 1 || bRec.component == 3);
 
-        if (Frame::cosTheta(bRec.wi) == 0 || (!hasReflection && !hasTransmission)
+        const auto costheta_i = Frame::cosTheta(bRec.wi);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        if (costheta_i == 0 || (!hasReflection && !hasTransmission)
              || (!hasDirect && !hasScattered))
             return Spectrum(.0f);
 
         Assert(!!bRec.pltCtx);
         
         Float costheta_t;
-        const auto Fr = fresnelDielectricExt(Frame::cosTheta(bRec.wi),costheta_t,m_eta);
-        const auto q = m_q->eval(bRec.its).average();
-        const auto a = gaussianSurface::alpha(Frame::cosTheta(bRec.wi), q);
-        const auto sigma2 = m_sigma2->eval(bRec.its).average();
+        const auto Fr = fresnelDielectricExt(costheta_i,costheta_t,m_eta);
+        const auto a = gfs.alpha(costheta_i, costheta_o);
         
         Vector3 wo;
         
@@ -348,21 +358,20 @@ public:
         if (hasReflection && hasTransmission) {
             if (isDirect) {
                 isReflection =  sample.y <= Fr;
-                const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
-                                                m_specularTransmittance->eval(bRec.its);
+                const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : m_specularTransmittance->eval(bRec.its);
                 
                 wo = isReflection ? reflect(bRec.wi) : refract(bRec.wi, costheta_t);
                 weight *= a * m00;
             }
             else {
-                wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
                 if (wo.z*bRec.wi.z<.0f)
                     wo.z *= -1.f;
-                pdf *= gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo);
+                pdf *= gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo);
                 
                 const auto h = bRec.wi + wo;
                 const auto m = normalize(h);
-                const auto r = fresnelDielectricExt(dot(bRec.wi,m),m_eta);
+                const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
 
                 isReflection = sample.y <= r;
                 if (!isReflection)
@@ -370,7 +379,7 @@ public:
                 
                 const auto m00 = isReflection ? m_specularReflectance->eval(bRec.its) : 
                                                 m_specularTransmittance->eval(bRec.its);
-                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00;
+                weight *= std::fabs(costheta_o) * (Spectrum(1.f)-a) * m00;
             }
         }
         else if (hasReflection) {
@@ -380,15 +389,15 @@ public:
                 weight *= a * m00 * Fr;
             }
             else {
-                wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
                 if (wo.z*bRec.wi.z<.0f)
                     wo.z *= -1.f;
-                pdf *= gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo);
+                pdf *= gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo);
 
                 const auto h = bRec.wi + wo;
                 const auto m = normalize(h);
-                const auto r = fresnelDielectricExt(dot(bRec.wi,m),m_eta);
-                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00 * r;
+                const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
+                weight *= std::fabs(costheta_o) * (Spectrum(1.f)-a) * m00 * r;
             }
         }
         else {
@@ -398,17 +407,17 @@ public:
                 weight *= a * m00 * (1-Fr);
             }
             else {
-                wo = gaussianSurface::sampleScattered(sigma2, *bRec.pltCtx, bRec.wi, *bRec.sampler);
+                wo = gfs.sampleScattered(*bRec.pltCtx, bRec.wi, *bRec.sampler);
                 if (wo.z*bRec.wi.z<.0f)
                     wo.z *= -1.f;
-                pdf *= gaussianSurface::scatteredPdf(sigma2, *bRec.pltCtx, bRec.wi, wo);
+                pdf *= gfs.scatteredPdf(*bRec.pltCtx, bRec.wi, wo);
                 
                 const auto h = bRec.wi + wo;
                 const auto m = normalize(h);
-                const auto r = fresnelDielectricExt(dot(bRec.wi,m),m_eta);
+                const auto r = fresnelDielectricExt(glm::sign(bRec.wi.z) * dot(bRec.wi,m),m_eta);
                 
                 wo = scattered_wo(wo);
-                weight *= std::fabs(Frame::cosTheta(wo)) * (Spectrum(1.f)-a) * m00 * (1-r);
+                weight *= std::fabs(costheta_o) * (Spectrum(1.f)-a) * m00 * (1-r);
             }
         }
         
@@ -447,8 +456,6 @@ public:
         oss << "Dielectric[" << endl
             << "  id = \"" << getID() << "\"," << endl
             << "  eta = " << m_eta << "," << endl
-            << "  q = " << indent(m_q->toString()) << "," << endl
-            << "  sigma2 = " << indent(m_sigma2->toString()) << "," << endl
             << "  specularReflectance = " << indent(m_specularReflectance->toString()) << "," << endl
             << "  specularTransmittance = " << indent(m_specularTransmittance->toString()) << endl
             << "]";
@@ -459,8 +466,8 @@ public:
 private:
     ref<Texture> m_specularTransmittance;
     ref<Texture> m_specularReflectance;
-    ref<Texture> m_q, m_sigma2;
     Float m_eta, m_invEta;
+    gaussian_fractal_surface gfs;
 };
 
 
