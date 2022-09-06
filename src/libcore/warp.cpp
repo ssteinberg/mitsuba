@@ -152,7 +152,7 @@ Vector squareToTruncatedGaussian(Float stddev, const Point2 &mean, Sampler &samp
         }
     }
 
-    assert(false);  // Rejection sampling failed
+    // assert(false);  // Rejection sampling failed
     return Vector{0,0,0};
 }
 

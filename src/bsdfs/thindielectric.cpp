@@ -16,6 +16,11 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+    Copyright, Shlomi Steinberg
+*/
+
+
 #include <cmath>
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/hw/basicshader.h>
@@ -54,9 +59,10 @@ public:
         m_tauScale = props.getFloat("thicknessScale", 1.f);
         m_birefringence = new ConstantFloatTexture(props.getFloat("birefringence", .0f));
         m_birefringenceScale = props.getFloat("birefringenceScale", 1.f);
+        m_birefringenceIntensityScale = props.getFloat("birefringenceIntensityScale", 1.f);
         
         if (props.hasProperty("polarizer")) {
-            m_polarizer = true;
+            m_polarizer = props.getBoolean("isPolarizer", true);
             m_polarizationDir = props.getFloat("polarizer");
             m_polarizationIntensity = props.getFloat("polarizerIntensity", 1.f);
         }
@@ -85,6 +91,8 @@ public:
         m_birefringence = static_cast<Texture *>(manager->getInstance(stream));
         m_tau = static_cast<Texture *>(manager->getInstance(stream));
         m_tauScale = stream->readFloat();
+        m_birefringenceScale = stream->readFloat();
+        m_birefringenceIntensityScale = stream->readFloat();
         m_polarizer = stream->readBool();
         m_polarizationDir = stream->readFloat();
         m_polarizationIntensity = stream->readFloat();
@@ -108,6 +116,8 @@ public:
         manager->serialize(stream, m_birefringence.get());
         manager->serialize(stream, m_tau.get());
         stream->writeFloat(m_tauScale);
+        stream->writeFloat(m_birefringenceScale);
+        stream->writeFloat(m_birefringenceIntensityScale);
         stream->writeBool(m_polarizer);
         stream->writeFloat(m_polarizationDir);
         stream->writeFloat(m_polarizationIntensity);
@@ -212,7 +222,7 @@ public:
             const auto pp = tpo*top + tpe*tep;
             const auto oez = std::abs(Ioz-Iez)/2;
             const auto mutual_coh = radPac.mutualCoherence(k, oez*Z, pltCtx.sigma_zz * 1e+6f);   // in micron
-            const auto t = mutual_coh * 2*std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
+            const auto t = mutual_coh * 2*m_birefringenceIntensityScale*std::sin(-k*(ei*oez*I.z+OPLo-OPLe));    // Interference term, modulated by mutual coherence
 
             const auto nLx = std::max(.0f, sqr(ss)*Lx + sqr(ps)*Ly + ss*ps*t*sqrtLxLy);
             Ly = std::max(.0f, sqr(sp)*Lx + sqr(pp)*Ly + sp*pp*t*sqrtLxLy);
@@ -605,7 +615,7 @@ private:
     Float m_tauScale;
     ref<Texture> m_tau;
     
-    Float m_birefringenceScale;
+    Float m_birefringenceScale,m_birefringenceIntensityScale;
     ref<Texture> m_birefringence;
 
     bool m_polarizer{ false };

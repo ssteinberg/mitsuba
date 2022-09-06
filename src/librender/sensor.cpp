@@ -38,7 +38,7 @@ Sensor::Sensor(const Properties &props)
         m_type |= EDeltaTime;
         
     if (props.hasProperty("polarizer")) {
-        m_polarizer = true;
+        m_polarizer = props.getBoolean("isPolarizer", true);
         m_polarizationDir = props.getFloat("polarizer");
         m_polarizationIntensity = props.getFloat("polarizerIntensity", 1.f);
     }

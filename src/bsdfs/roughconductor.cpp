@@ -16,6 +16,11 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+    Copyright, Shlomi Steinberg
+*/
+
+
 #include <cmath>
 
 #include <mitsuba/core/fresolver.h>
@@ -68,7 +73,7 @@ public:
         if (props.hasProperty("T"))
             gfs.T = props.getFloat("T");
         else 
-            gfs.T = props.getFloat("sigma2",.0f) / (gfs.gamma+1);
+            gfs.T = props.getFloat("sigma2",1.f) / (gfs.gamma+1);
         gfs.sigma_h2 = q;
     }
 
