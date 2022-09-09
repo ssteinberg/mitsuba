@@ -235,8 +235,8 @@ public:
         rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
 
         const auto k = Spectrum::ks().average();
-        const auto D = !hasDirect ? 
-                       gfs.diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), Q,Qt, k*h) : 1.f;
+        const auto D = 
+            !hasDirect ? gfs.diffract(rpp.invTheta(k,bRec.pltCtx->sigma_zz * 1e+6f), Q,Qt, k*h) : 1.f;
         const auto M = !hasDirect ? 
                     MuellerFresnelspm1(costheta_i, costheta_o, phii, phio, m_eta, isReflection) :
                     MuellerFresnelDielectric(costheta_i, m_eta, isReflection);

@@ -76,7 +76,8 @@ struct gaussian_fractal_surface {
         const auto u2d2 = sampler.next2D();
         
         const float M = 1.f - glm::pow(1+sqr(k)*T*sqr(1+s), -(gamma-1)/2.f);
-        const float f = glm::sqrt(T * (glm::pow(1-M*u2d1.x, -2.f/(gamma-1)) - 1.f)); 
+        const float f = glm::sqrt((glm::pow(1-M*u2d1.x, -2.f/(gamma-1)) - 1.f)*T); 
+        // const float f = glm::sqrt((glm::pow(1-M*u2d1.x, -2.f/(gamma-1)) - 1.f)/T); 
 
         const auto phi_max = //f==.0f || s==.0f ? 
             float(M_PI);
