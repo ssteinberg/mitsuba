@@ -34,6 +34,8 @@
 #if defined(_MSC_VER)
 #pragma warning(disable : 4231) // nonstandard extension used : 'extern' before template explicit instantiation
 #endif
+#include <ImfInt64.h>
+#include <ImfFrameBuffer.h>
 #include <ImfInputFile.h>
 #include <ImfStandardAttributes.h>
 #include <ImfRgbaYca.h>
@@ -263,7 +265,7 @@ extern "C" {
         p->mgr.free_in_buffer = 0;
     }
 
-    METHODDEF(void) jpeg_error_exit (j_common_ptr cinfo) throw(std::runtime_error) {
+    METHODDEF(void) jpeg_error_exit (j_common_ptr cinfo) {
         char msg[JMSG_LENGTH_MAX];
         (*cinfo->err->format_message) (cinfo, msg);
         SLog(EError, "Critcal libjpeg error: %s", msg);

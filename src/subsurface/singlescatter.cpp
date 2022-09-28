@@ -1344,7 +1344,7 @@ public:
             // 2014-03-10 jDG: Better to use the <<canonic>> way to get
             //                 both the refracted direction AND the attenuation.
             BSDFSamplingRecord bRec(its2, sampler);
-            bRec.typeMask = BSDF::EDeltaTransmission;
+            bRec.typeMask = BSDF::EDirectTransmission;
             Spectrum bsdfAtt = m_BSDF->sample(bRec, sampler->next2D());
             sampler->advance();
             Vector dOutgoing = its2.toWorld(bRec.wo);
@@ -1602,7 +1602,7 @@ public:
         //---- Perform Reflections (if any) ----------------------------------
         {
             BSDFSamplingRecord bRec(its, sampler);
-            bRec.typeMask = BSDF::EDeltaReflection;
+            bRec.typeMask = BSDF::EDirectReflection;
             Spectrum reflectAttenuation =
                 m_BSDF->sample(bRec, sampler->next2D());
             Vector dBounced = its.toWorld(bRec.wo);
@@ -1623,7 +1623,7 @@ public:
         //---- Perform refractions (if any) and single scatter ----------------------
         {
             BSDFSamplingRecord bRec(its, sampler);
-            bRec.typeMask = BSDF::EDeltaTransmission;
+            bRec.typeMask = BSDF::EDirectTransmission;
             Spectrum refractAttenuation =
                 m_BSDF->sample(bRec, sampler->next2D());
             Vector dInternal = its.toWorld(bRec.wo);

@@ -21,6 +21,8 @@
 
 #include <mitsuba/mitsuba.h>
 
+#include <mitsuba/plt/plt.hpp>
+
 /**
  * When the following is set to "1", the Bidirectional Path Tracer
  * will generate a series of debugging images that split up the final
@@ -47,6 +49,7 @@ struct BDPTConfiguration {
     size_t sampleCount;
     Vector2i cropSize;
     int rrDepth;
+    PLTContext pltCtx;
 
     inline BDPTConfiguration() { }
 
@@ -59,6 +62,8 @@ struct BDPTConfiguration {
         sampleCount = stream->readSize();
         cropSize = Vector2i(stream);
         rrDepth = stream->readInt();
+        pltCtx.sigma_zz = stream->readFloat();
+        pltCtx.sigma2_min_um = stream->readFloat();
     }
 
     inline void serialize(Stream *stream) const {
@@ -70,6 +75,8 @@ struct BDPTConfiguration {
         stream->writeSize(sampleCount);
         cropSize.serialize(stream);
         stream->writeInt(rrDepth);
+        stream->writeFloat(pltCtx.sigma_zz);
+        stream->writeFloat(pltCtx.sigma2_min_um);
     }
 
     void dump() const {
@@ -84,6 +91,7 @@ struct BDPTConfiguration {
         SLog(EDebug, "   Russian roulette depth      : %i", rrDepth);
         SLog(EDebug, "   Block size                  : %i", blockSize);
         SLog(EDebug, "   Number of samples           : " SIZE_T_FMT, sampleCount);
+        SLog(EDebug, "   PLT --- sigma_zz, sigmax_min_um : %d, %d", pltCtx.sigma_zz, pltCtx.sigma2_min_um);
         #if BDPT_DEBUG == 1
             SLog(EDebug, "   Show weighted contributions : %s", showWeighted ? "yes" : "no");
         #endif

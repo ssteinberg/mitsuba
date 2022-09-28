@@ -94,6 +94,7 @@ Spectrum Spectrum::rgbIllum2SpecBlue;
 /* Covered wavelength range of each spectral bin */
 Float Spectrum::m_wavelengths[SPECTRUM_SAMPLES + 1];
 #endif
+Spectrum Spectrum::m_lambdas, Spectrum::m_ks;
 
 /// Pre-integrated D65 illuminant
 Spectrum Spectrum::CIE_D65;
@@ -112,6 +113,13 @@ void Spectrum::staticInitialization() {
             if (i+1<SPECTRUM_SAMPLES)
                 oss << ", ";
         }
+    }
+    
+    for (std::size_t i=0;i<SPECTRUM_SAMPLES;++i) {
+        const auto b = getBinCoverage(i);
+        const auto l = (b.first+b.second)/2;
+        m_lambdas[i] = l/1e+3;
+        m_ks[i] = 2*M_PI / m_lambdas[i];
     }
 
     /* Pre-integrate the XYZ color matching functions */

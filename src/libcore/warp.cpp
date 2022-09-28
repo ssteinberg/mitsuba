@@ -17,6 +17,11 @@
 */
 
 #include <mitsuba/core/warp.h>
+#include "mitsuba/core/constants.h"
+#include "mitsuba/core/fwd.h"
+#include "mitsuba/core/math.h"
+#include "mitsuba/render/sampler.h"
+#include <cmath>
 
 MTS_NAMESPACE_BEGIN
 
@@ -41,14 +46,8 @@ Vector squareToUniformHemisphere(const Point2 &sample) {
 }
 
 Vector squareToCosineHemisphere(const Point2 &sample) {
-    Point2 p = squareToUniformDiskConcentric(sample);
-    Float z = math::safe_sqrt(1.0f - p.x*p.x - p.y*p.y);
-
-    /* Guard against numerical imprecisions */
-    if (EXPECT_NOT_TAKEN(z == 0))
-        z = 1e-10f;
-
-    return Vector(p.x, p.y, z);
+    const auto p = squareToUniformDiskConcentric(sample);
+    return diskToCosineHemisphere(p);
 }
 
 Vector squareToUniformCone(Float cosCutoff, const Point2 &sample) {
@@ -129,7 +128,7 @@ Point2 uniformDiskToSquareConcentric(const Point2 &p) {
 }
 
 Point2 squareToStdNormal(const Point2 &sample) {
-    Float r   = std::sqrt(-2 * math::fastlog(1-sample.x)),
+    Float r   = std::sqrt(-2 * std::log(1-sample.x)),
           phi = 2 * M_PI * sample.y;
     Point2 result;
     math::sincos(phi, &result.y, &result.x);
@@ -137,7 +136,37 @@ Point2 squareToStdNormal(const Point2 &sample) {
 }
 
 Float squareToStdNormalPdf(const Point2 &pos) {
-    return INV_TWOPI * math::fastexp(-(pos.x*pos.x + pos.y*pos.y)/2.0f);
+    return INV_TWOPI * std::exp(-(pos.x*pos.x + pos.y*pos.y)/2.0f);
+}
+
+Vector squareToTruncatedGaussian(Float stddev, const Point2 &mean, Sampler &sampler) {
+    constexpr auto attempts = 1000ull;
+    for (auto i=0ull; i<attempts; ++i) {
+        const auto& p = squareToStdNormal(sampler.next2D())*stddev + mean;
+        const auto l = sqr(p.x)+sqr(p.y);
+        if (l<=1) {
+            auto z = std::sqrt(1-l);
+            if (EXPECT_NOT_TAKEN(z < 1e-10f))
+                z = 1e-10f;
+            return Vector{ p.x,p.y,z };
+        }
+    }
+
+    // assert(false);  // Rejection sampling failed
+    return Vector{0,0,0};
+}
+
+Float squareToTruncatedGaussianPdf(Float stddev, const Point2 &mean, const Vector3 &pos) {
+    const auto& p = Point2{ pos.x-mean.x,pos.y-mean.y } / stddev;
+
+    const auto ymax = math::safe_sqrt(1-sqr(pos.x));
+    const auto cdfxmin = math::normalCDF((-1    - mean.x) / stddev);
+    const auto cdfxmax = math::normalCDF(( 1    - mean.x) / stddev);
+    const auto cdfymin = math::normalCDF((-ymax - mean.y) / stddev);
+    const auto cdfymax = math::normalCDF(( ymax - mean.y) / stddev);
+
+    const auto r = (cdfxmax-cdfxmin) * (cdfymax-cdfymin) * sqr(stddev);
+    return r>RCPOVERFLOW ? std::exp(-(sqr(p.x) + sqr(p.y))/2) * INV_TWOPI / r : .0f;
 }
 
 static Float intervalToTent(Float sample) {

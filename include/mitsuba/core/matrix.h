@@ -448,6 +448,34 @@ protected:
     static void tql2(T V[M][N], T d[N], T e[N]);
 };
 
+template <typename T> 
+inline Matrix<2,2,T> outer(const TVector2<T> &v1, const TVector2<T> &v2) {
+    static constexpr auto N = 2;
+    Matrix<N,N,T> m;
+    for (int i=0; i<N; ++i)
+        for (int j=0; j<N; ++j)
+            m.m[i][j] = v1[i]*v2[j];
+    return m;
+}
+template <typename T> 
+inline Matrix<3,3,T> outer(const TVector3<T> &v1, const TVector3<T> &v2) {
+    static constexpr auto N = 3;
+    Matrix<N,N,T> m;
+    for (int i=0; i<N; ++i)
+        for (int j=0; j<N; ++j)
+            m.m[i][j] = v1[i]*v2[j];
+    return m;
+}
+template <typename T> 
+inline Matrix<4,4,T> outer(const TVector4<T> &v1, const TVector4<T> &v2) {
+    static constexpr auto N = 4;
+    Matrix<N,N,T> m;
+    for (int i=0; i<N; ++i)
+        for (int j=0; j<N; ++j)
+            m.m[i][j] = v1[i]*v2[j];
+    return m;
+}
+
 /**
  * \brief Basic 2x2 matrix data type
  * \ingroup libcore

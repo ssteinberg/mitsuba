@@ -874,6 +874,10 @@ public:
      * D65 white point (with unit luminance)
      */
     inline static const Spectrum &getD65() { return CIE_D65; }
+    
+    // In microns
+    inline static auto lambdas() noexcept { return m_lambdas; }
+    inline static auto ks() noexcept { return m_ks; }
 
     /**
      * \brief Static initialization (should be called once during the
@@ -888,6 +892,7 @@ public:
      */
     static void staticInitialization();
     static void staticShutdown();
+
 protected:
     #if SPECTRUM_SAMPLES != 3
     /// Configured wavelengths bins in nanometers
@@ -923,6 +928,8 @@ protected:
 
     /// Pre-integrated D65 illuminant
     static Spectrum CIE_D65;
+
+    static Spectrum m_lambdas, m_ks;
 };
 
 MTS_NAMESPACE_END

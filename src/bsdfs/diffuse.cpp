@@ -16,6 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/plt/plt.hpp"
 #include <mitsuba/render/bsdf.h>
 #include <mitsuba/render/texture.h>
 #include <mitsuba/hw/basicshader.h>
@@ -96,9 +97,8 @@ public:
 
         m_components.clear();
         if (m_reflectance->getMaximum().max() > 0)
-            m_components.push_back(EDiffuseReflection | EFrontSide
+            m_components.push_back(EScatteredReflection | EFrontSide
                 | (m_reflectance->isConstant() ? 0 : ESpatiallyVarying));
-            m_usesRayDifferentials = m_reflectance->usesRayDifferentials();
 
         BSDF::configure();
     }
@@ -107,45 +107,63 @@ public:
         return m_reflectance->eval(its);
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || measure != ESolidAngle
+    Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
+        if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
             return Spectrum(0.0f);
+        
+        const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        
+        return costheta_o * m00;
+    }
 
-        return m_reflectance->eval(bRec.its)
-            * (INV_PI * Frame::cosTheta(bRec.wo));
+    Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta, 
+                  RadiancePacket &rpp, EMeasure measure) const {
+        if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
+            || Frame::cosTheta(bRec.wi) <= 0
+            || Frame::cosTheta(bRec.wo) <= 0) 
+            return Spectrum(.0f);
+
+        Assert(bRec.mode==EImportance && rpp.isValid());
+        Assert(!!bRec.pltCtx);
+
+        const auto m00 = m_reflectance->eval(bRec.its) * INV_PI;
+        const auto M = Float(1);
+        const auto costheta_o = Frame::cosTheta(bRec.wo);
+        
+        rpp.rotateFrame(bRec.its, Frame::spframe(bRec.wo));
+        
+        const auto in = rpp.spectrum();
+        Spectrum result = Spectrum(.0f);
+        for (std::size_t idx=0; idx<rpp.size(); ++idx) {
+            // Fully depolarize
+            rpp.L(idx) = { costheta_o * m00[idx] * M * rpp.S(idx)[0], 0,0,0 };
+            
+            if (in[idx]>RCPOVERFLOW)
+                result[idx] = rpp.L(idx)[0] / in[idx];
+        }
+
+        return result;
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || measure != ESolidAngle
+        if (!(bRec.typeMask & EScatteredReflection) || measure != ESolidAngle
             || Frame::cosTheta(bRec.wi) <= 0
             || Frame::cosTheta(bRec.wo) <= 0)
             return 0.0f;
-
         return warp::squareToCosineHemispherePdf(bRec.wo);
     }
 
     Spectrum sample(BSDFSamplingRecord &bRec, const Point2 &sample) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || Frame::cosTheta(bRec.wi) <= 0)
+        if (!(bRec.typeMask & EScatteredReflection) || Frame::cosTheta(bRec.wi) <= 0)
             return Spectrum(0.0f);
 
         bRec.wo = warp::squareToCosineHemisphere(sample);
         bRec.eta = 1.0f;
         bRec.sampledComponent = 0;
-        bRec.sampledType = EDiffuseReflection;
-        return m_reflectance->eval(bRec.its);
-    }
-
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        if (!(bRec.typeMask & EDiffuseReflection) || Frame::cosTheta(bRec.wi) <= 0)
-            return Spectrum(0.0f);
-
-        bRec.wo = warp::squareToCosineHemisphere(sample);
-        bRec.eta = 1.0f;
-        bRec.sampledComponent = 0;
-        bRec.sampledType = EDiffuseReflection;
-        pdf = warp::squareToCosineHemispherePdf(bRec.wo);
+        bRec.sampledType = EScatteredReflection;
         return m_reflectance->eval(bRec.its);
     }
 
@@ -177,59 +195,11 @@ public:
         return oss.str();
     }
 
-    Shader *createShader(Renderer *renderer) const;
-
     MTS_DECLARE_CLASS()
 private:
     ref<Texture> m_reflectance;
 };
 
-// ================ Hardware shader implementation ================
-
-class SmoothDiffuseShader : public Shader {
-public:
-    SmoothDiffuseShader(Renderer *renderer, const Texture *reflectance)
-        : Shader(renderer, EBSDFShader), m_reflectance(reflectance) {
-        m_reflectanceShader = renderer->registerShaderForResource(m_reflectance.get());
-    }
-
-    bool isComplete() const {
-        return m_reflectanceShader.get() != NULL;
-    }
-
-    void cleanup(Renderer *renderer) {
-        renderer->unregisterShaderForResource(m_reflectance.get());
-    }
-
-    void putDependencies(std::vector<Shader *> &deps) {
-        deps.push_back(m_reflectanceShader.get());
-    }
-
-    void generateCode(std::ostringstream &oss,
-            const std::string &evalName,
-            const std::vector<std::string> &depNames) const {
-        oss << "vec3 " << evalName << "(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    if (cosTheta(wi) < 0.0 || cosTheta(wo) < 0.0)" << endl
-            << "        return vec3(0.0);" << endl
-            << "    return " << depNames[0] << "(uv) * inv_pi * cosTheta(wo);" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "_diffuse(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    return " << evalName << "(uv, wi, wo);" << endl
-            << "}" << endl;
-    }
-
-    MTS_DECLARE_CLASS()
-private:
-    ref<const Texture> m_reflectance;
-    ref<Shader> m_reflectanceShader;
-};
-
-Shader *SmoothDiffuse::createShader(Renderer *renderer) const {
-    return new SmoothDiffuseShader(renderer, m_reflectance.get());
-}
-
-MTS_IMPLEMENT_CLASS(SmoothDiffuseShader, false, Shader)
 MTS_IMPLEMENT_CLASS_S(SmoothDiffuse, false, BSDF)
-MTS_EXPORT_PLUGIN(SmoothDiffuse, "Smooth diffuse BRDF")
+MTS_EXPORT_PLUGIN(SmoothDiffuse, "Idealised diffuse BRDF")
 MTS_NAMESPACE_END

@@ -36,6 +36,12 @@ Sensor::Sensor(const Properties &props)
 
     if (m_shutterOpenTime == 0)
         m_type |= EDeltaTime;
+        
+    if (props.hasProperty("polarizer")) {
+        m_polarizer = props.getBoolean("isPolarizer", false);
+        m_polarizationDir = props.getFloat("polarizer");
+        m_polarizationIntensity = props.getFloat("polarizerIntensity", 1.f);
+    }
 }
 
 Sensor::Sensor(Stream *stream, InstanceManager *manager)
@@ -44,6 +50,9 @@ Sensor::Sensor(Stream *stream, InstanceManager *manager)
     m_sampler = static_cast<Sampler *>(manager->getInstance(stream));
     m_shutterOpen = stream->readFloat();
     m_shutterOpenTime = stream->readFloat();
+    m_polarizer = stream->readBool();
+    m_polarizationDir = stream->readFloat();
+    m_polarizationIntensity = stream->readFloat();
 }
 
 Sensor::~Sensor() {
@@ -55,6 +64,9 @@ void Sensor::serialize(Stream *stream, InstanceManager *manager) const {
     manager->serialize(stream, m_sampler.get());
     stream->writeFloat(m_shutterOpen);
     stream->writeFloat(m_shutterOpenTime);
+    stream->writeBool(m_polarizer);
+    stream->writeFloat(m_polarizationDir);
+    stream->writeFloat(m_polarizationIntensity);
 }
 
 void Sensor::setShutterOpenTime(Float time) {

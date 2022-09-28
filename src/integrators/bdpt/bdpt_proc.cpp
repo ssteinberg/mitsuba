@@ -19,7 +19,10 @@
 #include <mitsuba/core/statistics.h>
 #include <mitsuba/core/sfcurve.h>
 #include <mitsuba/bidir/util.h>
+#include <mitsuba/plt/plt.hpp>
 #include "bdpt_proc.h"
+#include "mitsuba/bidir/common.h"
+#include "mitsuba/render/common.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -110,7 +113,8 @@ public:
                 sensorSubpath.initialize(m_scene, time, ERadiance, m_pool);
 
                 /* Perform a random walk using alternating steps on each path */
-                Path::alternatingRandomWalkFromPixel(m_scene, m_sampler,
+                Path::alternatingRandomWalkFromPixel(m_scene, m_sampler, 
+                    m_config.pltCtx,
                     emitterSubpath, emitterDepth, sensorSubpath,
                     sensorDepth, offset, m_config.rrDepth, m_pool);
 
@@ -138,176 +142,172 @@ public:
         const Scene *scene = m_scene;
         PathVertex tempEndpoint, tempSample;
         PathEdge tempEdge, connectionEdge;
+ 
+        int maxS = (int)emitterSubpath.vertexCount()-1;
+        std::vector<RadiancePacket> rps;
+        std::vector<Spectrum> sweights;
+        rps.reserve(emitterSubpath.vertexCount()-1);
+        {
+            RadiancePacket rp{};
+            for (int s=0; s<maxS; ++s) {
+                PathVertex
+                    *vs = emitterSubpath.vertex(s),
+                    *vsPred = emitterSubpath.vertexOrNull(s-1),
+                    *vsNext = emitterSubpath.vertexOrNull(s+1);
+                
+                if (!vs->update(scene, vsPred, vsNext, 
+                                &rp, m_config.pltCtx, EImportance, nullptr, vs->measure)) {
+                    maxS = s;
+                    break;
+                }
+                rps.push_back(rp);
+            }
 
-        /* Compute the combined weights along the two subpaths */
-        Spectrum *importanceWeights = (Spectrum *) alloca(emitterSubpath.vertexCount() * sizeof(Spectrum)),
-                 *radianceWeights  = (Spectrum *) alloca(sensorSubpath.vertexCount()  * sizeof(Spectrum));
-
-        importanceWeights[0] = radianceWeights[0] = Spectrum(1.0f);
-        for (size_t i=1; i<emitterSubpath.vertexCount(); ++i)
-            importanceWeights[i] = importanceWeights[i-1] *
-                emitterSubpath.vertex(i-1)->weight[EImportance] *
-                emitterSubpath.vertex(i-1)->rrWeight *
-                emitterSubpath.edge(i-1)->weight[EImportance];
-
-        for (size_t i=1; i<sensorSubpath.vertexCount(); ++i)
-            radianceWeights[i] = radianceWeights[i-1] *
-                sensorSubpath.vertex(i-1)->weight[ERadiance] *
-                sensorSubpath.vertex(i-1)->rrWeight *
-                sensorSubpath.edge(i-1)->weight[ERadiance];
+            sweights.resize(maxS+1);
+            sweights[0] = Spectrum(1.f);
+            for (int i=1; i<=maxS; ++i)
+                sweights[i] = sweights[i-1] *
+                    emitterSubpath.vertex(i-1)->weight[EImportance] *
+                    emitterSubpath.vertex(i-1)->rrWeight *
+                    emitterSubpath.edge(i-1)->weight[EImportance];
+        }
 
         Spectrum sampleValue(0.0f);
-        for (int s = (int) emitterSubpath.vertexCount()-1; s >= 0; --s) {
+        for (int s = maxS; s >= 0; --s) {
             /* Determine the range of sensor vertices to be traversed,
                while respecting the specified maximum path length */
             int minT = std::max(2-s, m_config.lightImage ? 0 : 2),
-                maxT = (int) sensorSubpath.vertexCount() - 1;
+                maxT = (int)sensorSubpath.vertexCount()-1;
             if (m_config.maxDepth != -1)
                 maxT = std::min(maxT, m_config.maxDepth + 1 - s);
 
             for (int t = maxT; t >= minT; --t) {
                 PathVertex
-                    *vsPred = emitterSubpath.vertexOrNull(s-1),
-                    *vtPred = sensorSubpath.vertexOrNull(t-1),
                     *vs = emitterSubpath.vertex(s),
-                    *vt = sensorSubpath.vertex(t);
-                PathEdge
-                    *vsEdge = emitterSubpath.edgeOrNull(s-1),
-                    *vtEdge = sensorSubpath.edgeOrNull(t-1);
-
-                RestoreMeasureHelper rmh0(vs), rmh1(vt);
-
-                /* Will be set to true if direct sampling was used */
-                bool sampleDirect = false;
+                    *vsPred = emitterSubpath.vertexOrNull(s-1);
+                PathEdge *vsEdge = emitterSubpath.edgeOrNull(s-1);
+                PathVertex *vt = sensorSubpath.vertex(t);
+                PathVertex *vtNext = sensorSubpath.vertexOrNull(t-1);
+                PathEdge *vtEdge = sensorSubpath.edgeOrNull(t-1);
 
                 /* Stores the pixel position associated with this sample */
                 Point2 samplePos = initialSamplePos;
+                Spectrum value = sweights[s];
+                RadiancePacket rp = s>0 ? rps[s-1] : RadiancePacket{};
+                if (value.isZero())
+                    continue;
+                
+                bool sampleDirect = false;
 
-                /* Allowed remaining number of ENull vertices that can
-                   be bridged via pathConnect (negative=arbitrarily many) */
-                int remaining = m_config.maxDepth - s - t + 1;
-
-                /* Will receive the path weight of the (s, t)-connection */
-                Spectrum value;
+                RestoreMeasureHelper rmhvs(vs), rmhvt(vt);
 
                 /* Account for the terms of the measurement contribution
                    function that are coupled to the connection endpoints */
                 if (vs->isEmitterSupernode()) {
                     /* If possible, convert 'vt' into an emitter sample */
-                    if (!vt->cast(scene, PathVertex::EEmitterSample) || vt->isDegenerate())
+                    if (!vt->cast(scene, PathVertex::EEmitterSample) || 
+                        vt->isDegenerate())
                         continue;
-
-                    value = radianceWeights[t] *
-                        vs->eval(scene, vsPred, vt, EImportance) *
-                        vt->eval(scene, vtPred, vs, ERadiance);
                 } else if (vt->isSensorSupernode()) {
                     /* If possible, convert 'vs' into an sensor sample */
-                    if (!vs->cast(scene, PathVertex::ESensorSample) || vs->isDegenerate())
+                    if (!vs->cast(scene, PathVertex::ESensorSample) || 
+                        vs->isDegenerate())
                         continue;
-
                     /* Make note of the changed pixel sample position */
                     if (!vs->getSamplePosition(vsPred, samplePos))
                         continue;
-
-                    value = importanceWeights[s] *
-                        vs->eval(scene, vsPred, vt, EImportance) *
-                        vt->eval(scene, vtPred, vs, ERadiance);
-                } else if (m_config.sampleDirect && ((t == 1 && s > 1) || (s == 1 && t > 1))) {
-                    /* s==1/t==1 path: use a direct sampling strategy if requested */
-                    if (s == 1) {
-                        if (vt->isDegenerate())
-                            continue;
-                        /* Generate a position on an emitter using direct sampling */
-                        value = radianceWeights[t] * vt->sampleDirect(scene, m_sampler,
-                            &tempEndpoint, &tempEdge, &tempSample, EImportance);
-                        if (value.isZero())
-                            continue;
-                        vs = &tempSample; vsPred = &tempEndpoint; vsEdge = &tempEdge;
-                        value *= vt->eval(scene, vtPred, vs, ERadiance);
-                        vt->measure = EArea;
-                    } else {
-                        if (vs->isDegenerate())
-                            continue;
-                        /* Generate a position on the sensor using direct sampling */
-                        value = importanceWeights[s] * vs->sampleDirect(scene, m_sampler,
-                            &tempEndpoint, &tempEdge, &tempSample, ERadiance);
-                        if (value.isZero())
-                            continue;
-                        vt = &tempSample; vtPred = &tempEndpoint; vtEdge = &tempEdge;
-                        value *= vs->eval(scene, vsPred, vt, EImportance);
-                        vs->measure = EArea;
-                    }
+                } else if (m_config.sampleDirect && (s == 1 && t > 1)) {
+                    if (vt->isDegenerate())
+                        continue;
+                    
+                    value = Spectrum(1.f);
+                    if (!vt->sampleDirect(scene, m_sampler,
+                                          &tempEndpoint, &tempEdge, &tempSample, ERadiance,
+                                          &rp, &value))
+                        continue;
+                    vs = &tempSample; vsPred = &tempEndpoint; vsEdge = &tempEdge;
 
                     sampleDirect = true;
                 } else {
                     /* Can't connect degenerate endpoints */
                     if (vs->isDegenerate() || vt->isDegenerate())
                         continue;
-
-                    value = importanceWeights[s] * radianceWeights[t] *
-                        vs->eval(scene, vsPred, vt, EImportance) *
-                        vt->eval(scene, vtPred, vs, ERadiance);
-
-                    /* Temporarily force vertex measure to EArea. Needed to
-                       handle BSDFs with diffuse + specular components */
-                    vs->measure = vt->measure = EArea;
-                }
-
-                /* Attempt to connect the two endpoints, which could result in
-                   the creation of additional vertices (index-matched boundaries etc.) */
-                int interactions = remaining; // backup
-                if (value.isZero() || !connectionEdge.pathConnectAndCollapse(
-                        scene, vsEdge, vs, vt, vtEdge, interactions))
-                    continue;
-
-                /* Account for the terms of the measurement contribution
-                   function that are coupled to the connection edge */
-                if (!sampleDirect)
-                    value *= connectionEdge.evalCached(vs, vt, PathEdge::EGeneralizedGeometricTerm);
-                else
-                    value *= connectionEdge.evalCached(vs, vt, PathEdge::ETransmittance |
-                            (s == 1 ? PathEdge::ECosineRad : PathEdge::ECosineImp));
-
-                if (sampleDirect) {
-                    /* A direct sampling strategy was used, which generated
-                       two new vertices at one of the path ends. Temporarily
-                       modify the path to reflect this change */
-                    if (t == 1)
-                        sensorSubpath.swapEndpoints(vtPred, vtEdge, vt);
-                    else
-                        emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
-                }
-
-                /* Compute the multiple importance sampling weight */
-                Float miWeight = Path::miWeight(scene, emitterSubpath, &connectionEdge,
-                    sensorSubpath, s, t, m_config.sampleDirect, m_config.lightImage);
-
-                if (sampleDirect) {
-                    /* Now undo the previous change */
-                    if (t == 1)
-                        sensorSubpath.swapEndpoints(vtPred, vtEdge, vt);
-                    else
-                        emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
                 }
 
                 /* Determine the pixel sample position when necessary */
                 if (vt->isSensorSample() && !vt->getSamplePosition(vs, samplePos))
                     continue;
+                
+                // Propagate coherence information and update all weights
+                if (!vs->update(scene, vsPred, vt, 
+                                &rp, m_config.pltCtx, EImportance, &value, 
+                                sampleDirect && s==1 ? vs->measure : EArea))
+                    continue;
 
-                #if BDPT_DEBUG == 1
-                    /* When the debug mode is on, collect samples
-                       separately for each sampling strategy. Note: the
-                       following piece of code artificially increases the
-                       exposure of longer paths */
-                    Spectrum splatValue = value * (m_config.showWeighted
-                        ? miWeight : 1.0f);// * std::pow(2.0f, s+t-3.0f));
-                    wr->putDebugSample(s, t, samplePos, splatValue);
-                #endif
+                /* Attempt to connect the two endpoints, which could result in
+                   the creation of additional vertices (index-matched boundaries etc.) */
+                int interactions = m_config.maxDepth - s - t + 1;
+                if (!connectionEdge.pathConnectAndCollapse(
+                        scene, vsEdge, vs, vt, m_config.pltCtx, rp, vtEdge, interactions))
+                    continue;
+                    
+                if (!vt->update(scene, vs, vtNext, 
+                                &rp, m_config.pltCtx, ERadiance, &value))
+                    continue;
+
+                /* Temporarily force vertex measure to EArea. Needed to
+                   handle BSDFs with diffuse + specular components */
+                if (!vs->isEmitterSupernode() && !sampleDirect)
+                    vs->measure = EArea;
+                if (!vt->isSensorSupernode())
+                    vt->measure = EArea;
+
+                // Finish evaluating the chain
+                for (int tt = t-1; tt>=std::max(1,minT); --tt) {
+                    PathVertex 
+                        *vtt = sensorSubpath.vertex(tt),
+                        *vttPred = sensorSubpath.vertexOrNull(tt+1),
+                        *vttNext = sensorSubpath.vertexOrNull(tt-1);
+                
+                    vtt->update(scene, vttPred, vttNext, 
+                                &rp, m_config.pltCtx, ERadiance, nullptr, vtt->measure);
+                    
+                    value *=
+                        vtt->weight[ERadiance] *
+                        vtt->rrWeight *
+                        sensorSubpath.edge(tt)->weight[ERadiance];
+                    if (value.isZero())
+                        break;
+                }
+                value *=
+                    sensorSubpath.vertex(0)->weight[ERadiance] *
+                    sensorSubpath.vertex(0)->rrWeight *
+                    sensorSubpath.edge(0)->weight[ERadiance];
+                if (value.isZero())
+                    continue;
+
+                value *= connectionEdge.evalCached(vs, vt, !sampleDirect ? 
+                                                        PathEdge::EGeneralizedGeometricTerm :
+                                                        (PathEdge::ETransmittance | PathEdge::ECosineRad));
+
+                /* A direct sampling strategy was used, which generated
+                   two new vertices at one of the path ends. Temporarily
+                   modify the path to reflect this change */
+                if (sampleDirect)
+                    emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
+
+                /* Compute the multiple importance sampling weight */
+                value *= Path::miWeight(scene, m_config.pltCtx,
+                    emitterSubpath, &connectionEdge, sensorSubpath, 
+                    s, t, m_config.sampleDirect, m_config.lightImage);
+
+                if (sampleDirect)
+                    emitterSubpath.swapEndpoints(vsPred, vsEdge, vs);
 
                 if (t >= 2)
-                    sampleValue += value * miWeight;
+                    sampleValue += value;
                 else
-                    wr->putLightSample(samplePos, value * miWeight);
+                    wr->putLightSample(samplePos, value);
             }
         }
         wr->putSample(initialSamplePos, sampleValue);

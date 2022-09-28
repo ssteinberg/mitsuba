@@ -654,7 +654,7 @@ Spectrum Scene::evalTransmittance(const Point &p1, bool p1OnSurface, const Point
         Vector wo = its.geoFrame.toLocal(ray.d);
         BSDFSamplingRecord bRec(its, -wo, wo, ERadiance);
         bRec.typeMask = BSDF::ENull;
-        transmittance *= bsdf->eval(bRec, EDiscrete);
+        transmittance *= bsdf->envelope(bRec, EDiscrete);
 
         if (its.isMediumTransition()) {
             if (medium != its.getTargetMedium(-d)) {
@@ -797,7 +797,7 @@ Spectrum Scene::evalTransmittanceAll(const Point &p1, bool p1OnSurface, const Po
         Vector wo = its.geoFrame.toLocal(ray.d);
         BSDFSamplingRecord bRec(its, -wo, wo, ERadiance);
         bRec.typeMask = BSDF::ENull;
-        transmittance *= bsdf->eval(bRec, EDiscrete);
+        transmittance *= bsdf->envelope(bRec, EDiscrete);
 
         if (its.isMediumTransition()) {
             if (medium != its.getTargetMedium(-d)) {

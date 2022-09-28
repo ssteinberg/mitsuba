@@ -16,6 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "mitsuba/plt/plt.hpp"
 #include <mitsuba/render/emitter.h>
 #include <mitsuba/render/shape.h>
 #include <mitsuba/render/medium.h>
@@ -74,14 +75,20 @@ public:
                 "allowed -- the area light inherits this transformation from "
                 "its parent shape");
 
-        m_radiance = props.getSpectrum("radiance", Spectrum::getD65());
+        const auto scale = props.getFloat("scale", 1.f);
+        m_radiance = props.getSpectrum("radiance", Spectrum::getD65()) * scale;
         m_power = Spectrum(0.0f); /// Don't know the power yet
+        
+        m_A = props.getFloat("A");
+        m_Omega = props.getFloat("Omega");
     }
 
     AreaLight(Stream *stream, InstanceManager *manager)
         : Emitter(stream, manager) {
         m_radiance = Spectrum(stream);
         m_power = Spectrum(stream);
+        m_A = stream->readFloat();
+        m_Omega = stream->readFloat();
         configure();
     }
 
@@ -89,6 +96,8 @@ public:
         Emitter::serialize(stream, manager);
         m_radiance.serialize(stream);
         m_power.serialize(stream);
+        stream->writeFloat(m_A);
+        stream->writeFloat(m_Omega);
     }
 
     Spectrum samplePosition(PositionSamplingRecord &pRec,
@@ -204,6 +213,11 @@ public:
     AABB getAABB() const {
         return m_shape->getAABB();
     }
+    
+    virtual RadiancePacket sourceLight() const override {
+        const auto c = 2 * M_PI * m_Omega/m_A;
+        return RadiancePacket{ evalPosition({}), c, (Float)0 };
+    }
 
     std::string toString() const {
         std::ostringstream oss;
@@ -226,6 +240,7 @@ public:
     MTS_DECLARE_CLASS()
 protected:
     Spectrum m_radiance, m_power;
+    Float m_Omega, m_A;
 };
 
 // ================ Hardware shader implementation ================

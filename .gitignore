@@ -48,3 +48,7 @@ mitsuba.*.log
 .settings
 .cproject
 .project
+
+.vscode
+.clangd
+.compile_commands.json

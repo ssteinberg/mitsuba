@@ -66,6 +66,9 @@ public:
         }
 
         m_intensity = props.getSpectrum("intensity", Spectrum::getD65());
+        
+        m_A = props.getFloat("A");
+        m_Omega = props.getFloat("Omega");
     }
 
     PointEmitter(Stream *stream, InstanceManager *manager)
@@ -115,6 +118,11 @@ public:
     Spectrum evalDirection(const DirectionSamplingRecord &dRec,
             const PositionSamplingRecord &pRec) const {
         return Spectrum((dRec.measure == ESolidAngle) ? INV_FOURPI : 0.0f);
+    }
+    
+    virtual RadiancePacket sourceLight() const override {
+        const auto c = 2 * M_PI * m_Omega/m_A;
+        return RadiancePacket{ evalPosition({}), c, (Float)0 };
     }
 
     Spectrum sampleRay(Ray &ray,
@@ -169,6 +177,7 @@ public:
     MTS_DECLARE_CLASS()
 private:
     Spectrum m_intensity;
+    Float m_Omega, m_A;
 };
 
 

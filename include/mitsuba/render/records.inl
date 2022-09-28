@@ -67,9 +67,8 @@ inline const BSDF *Intersection::getBSDF() const {
 }
 
 inline const BSDF *Intersection::getBSDF(const RayDifferential &ray) {
-    const BSDF *bsdf = shape->getBSDF();
-
-    if (bsdf && bsdf->usesRayDifferentials() && !hasUVPartials)
+    const auto bsdf = shape->getBSDF();
+    if (bsdf && !hasUVPartials)
         computePartials(ray);
     return bsdf;
 }

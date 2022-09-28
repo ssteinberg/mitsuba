@@ -93,8 +93,6 @@ public:
         for (int i=0; i<m_nested->getComponentCount(); ++i)
             m_components.push_back(m_nested->getType(i) | ESpatiallyVarying | EAnisotropic);
 
-        m_usesRayDifferentials = true;
-
         BSDF::configure();
     }
 
@@ -158,7 +156,8 @@ public:
         return result;
     }
 
-    Spectrum eval(const BSDFSamplingRecord &bRec, EMeasure measure) const {
+    Spectrum eval(const BSDFSamplingRecord &bRec, Float &eta,
+                  RadiancePacket &rpp, EMeasure measure) const { 
         const Intersection& its = bRec.its;
         Intersection perturbed(its);
         perturbed.shFrame = getFrame(its);
@@ -171,7 +170,25 @@ public:
         perturbedQuery.sampler = bRec.sampler;
         perturbedQuery.typeMask = bRec.typeMask;
         perturbedQuery.component = bRec.component;
-        return m_nested->eval(perturbedQuery, measure);
+        perturbedQuery.pltCtx = bRec.pltCtx;
+        return m_nested->eval(perturbedQuery, eta, rpp, measure);
+    }
+
+    Spectrum envelope(const BSDFSamplingRecord &bRec, Float &eta, EMeasure measure) const {
+        const Intersection& its = bRec.its;
+        Intersection perturbed(its);
+        perturbed.shFrame = getFrame(its);
+
+        BSDFSamplingRecord perturbedQuery(perturbed,
+            perturbed.toLocal(its.toWorld(bRec.wi)),
+            perturbed.toLocal(its.toWorld(bRec.wo)), bRec.mode);
+        if (Frame::cosTheta(bRec.wo) * Frame::cosTheta(perturbedQuery.wo) <= 0)
+            return Spectrum(0.0f);
+        perturbedQuery.sampler = bRec.sampler;
+        perturbedQuery.typeMask = bRec.typeMask;
+        perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
+        return m_nested->envelope(perturbedQuery, eta, measure);
     }
 
     Float pdf(const BSDFSamplingRecord &bRec, EMeasure measure) const {
@@ -188,6 +205,7 @@ public:
         perturbedQuery.sampler = bRec.sampler;
         perturbedQuery.typeMask = bRec.typeMask;
         perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
         return m_nested->pdf(perturbedQuery, measure);
     }
 
@@ -201,6 +219,7 @@ public:
         perturbedQuery.sampler = bRec.sampler;
         perturbedQuery.typeMask = bRec.typeMask;
         perturbedQuery.component = bRec.component;
+        perturbedQuery.pltCtx = bRec.pltCtx;
         Spectrum result = m_nested->sample(perturbedQuery, sample);
         if (!result.isZero()) {
             bRec.sampledComponent = perturbedQuery.sampledComponent;
@@ -213,33 +232,6 @@ public:
         return result;
     }
 
-    Spectrum sample(BSDFSamplingRecord &bRec, Float &pdf, const Point2 &sample) const {
-        const Intersection& its = bRec.its;
-        Intersection perturbed(its);
-        perturbed.shFrame = getFrame(its);
-
-        BSDFSamplingRecord perturbedQuery(perturbed, bRec.sampler, bRec.mode);
-        perturbedQuery.wi = perturbed.toLocal(its.toWorld(bRec.wi));
-        perturbedQuery.typeMask = bRec.typeMask;
-        perturbedQuery.component = bRec.component;
-        Spectrum result = m_nested->sample(perturbedQuery, pdf, sample);
-
-        if (!result.isZero()) {
-            bRec.sampledComponent = perturbedQuery.sampledComponent;
-            bRec.sampledType = perturbedQuery.sampledType;
-            bRec.wo = its.toLocal(perturbed.toWorld(perturbedQuery.wo));
-            bRec.eta = perturbedQuery.eta;
-            if (Frame::cosTheta(bRec.wo) * Frame::cosTheta(perturbedQuery.wo) <= 0)
-                return Spectrum(0.0f);
-        }
-
-        return result;
-    }
-
-    Float getRoughness(const Intersection &its, int component) const {
-        return m_nested->getRoughness(its, component);
-    }
-
     std::string toString() const {
         std::ostringstream oss;
         oss << "BumpMap[" << endl
@@ -250,90 +242,12 @@ public:
         return oss.str();
     }
 
-    Shader *createShader(Renderer *renderer) const;
-
     MTS_DECLARE_CLASS()
 protected:
     ref<Texture> m_displacement;
     ref<BSDF> m_nested;
 };
 
-// ================ Hardware shader implementation ================
-
-/**
- * This is a quite approximate version of the bump map model -- it likely
- * won't match the reference exactly, but it should be good enough for
- * preview purposes
- */
-class BumpMapShader : public Shader {
-public:
-    BumpMapShader(Renderer *renderer, const BSDF *nested, const Texture *displacement)
-        : Shader(renderer, EBSDFShader), m_nested(nested), m_displacement(displacement) {
-        m_nestedShader = renderer->registerShaderForResource(m_nested.get());
-        m_displacementShader = renderer->registerShaderForResource(m_displacement.get());
-    }
-
-    bool isComplete() const {
-        return m_nestedShader.get() != NULL;
-    }
-
-    void cleanup(Renderer *renderer) {
-        renderer->unregisterShaderForResource(m_nested.get());
-        renderer->unregisterShaderForResource(m_displacement.get());
-    }
-
-    void putDependencies(std::vector<Shader *> &deps) {
-        deps.push_back(m_nestedShader.get());
-        deps.push_back(m_displacementShader.get());
-    }
-
-    void generateCode(std::ostringstream &oss,
-            const std::string &evalName,
-            const std::vector<std::string> &depNames) const {
-        oss << "vec3 " << evalName << "(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    float eps = 1e-4;" << endl
-            << "    float displacement = " << depNames[1] << "(uv)[0];" << endl
-            << "    float displacementU = " << depNames[1] << "(uv + vec2(eps, 0.0))[0];" << endl
-            << "    float displacementV = " << depNames[1] << "(uv + vec2(0.0, eps))[0];" << endl
-            << "    float dfdu = (displacementU - displacement)*(0.5/eps);" << endl
-            << "    float dfdv = (displacementV - displacement)*(0.5/eps);" << endl
-            << "    vec3 n = normalize(vec3(-dfdu, -dfdv, 1.0));" << endl
-            << "    vec3 s = normalize(vec3(1.0-n.x*n.x, -n.x*n.y, -n.x*n.z)); " << endl
-            << "    vec3 t = cross(s, n);" << endl
-            << "    wi = vec3(dot(wi, s), dot(wi, t), dot(wi, n));" << endl
-            << "    wo = vec3(dot(wo, s), dot(wo, t), dot(wo, n));" << endl
-            << "    return " << depNames[0] << "(uv, wi, wo);" << endl
-            << "}" << endl
-            << endl
-            << "vec3 " << evalName << "_diffuse(vec2 uv, vec3 wi, vec3 wo) {" << endl
-            << "    float eps = 1e-4;" << endl
-            << "    float displacement = " << depNames[1] << "(uv)[0];" << endl
-            << "    float displacementU = " << depNames[1] << "(uv + vec2(eps, 0.0))[0];" << endl
-            << "    float displacementV = " << depNames[1] << "(uv + vec2(0.0, eps))[0];" << endl
-            << "    float dfdu = (displacementU - displacement)*(0.5/eps);" << endl
-            << "    float dfdv = (displacementV - displacement)*(0.5/eps);" << endl
-            << "    vec3 n = normalize(vec3(-dfdu, -dfdv, 1.0));" << endl
-            << "    vec3 s = normalize(vec3(1.0-n.x*n.x, -n.x*n.y, -n.x*n.z)); " << endl
-            << "    vec3 t = cross(s, n);" << endl
-            << "    wi = vec3(dot(wi, s), dot(wi, t), dot(wi, n));" << endl
-            << "    wo = vec3(dot(wo, s), dot(wo, t), dot(wo, n));" << endl
-            << "    return " << depNames[0] << "_diffuse(uv, wi, wo);" << endl
-            << "}" << endl;
-    }
-
-    MTS_DECLARE_CLASS()
-private:
-    ref<const BSDF> m_nested;
-    ref<const Texture> m_displacement;
-    ref<Shader> m_nestedShader;
-    ref<Shader> m_displacementShader;
-};
-
-Shader *BumpMap::createShader(Renderer *renderer) const {
-    return new BumpMapShader(renderer, m_nested.get(), m_displacement.get());
-}
-
-MTS_IMPLEMENT_CLASS(BumpMapShader, false, Shader)
 MTS_IMPLEMENT_CLASS_S(BumpMap, false, BSDF)
 MTS_EXPORT_PLUGIN(BumpMap, "Bump map modifier");
 MTS_NAMESPACE_END

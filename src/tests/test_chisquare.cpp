@@ -122,7 +122,8 @@ public:
             /* Check the various sampling routines for agreement
                amongst each other */
             m_fakeSampler->clear();
-            Spectrum sampled = m_bsdf->sample(bRec, sampledPDF, sample);
+            Spectrum sampled = m_bsdf->sample(bRec, sample);
+            sampledPDF = m_bsdf->pdf(bRec);
             m_fakeSampler->rewind();
             Spectrum sampled2 = m_bsdf->sample(bRec, sample);
             EMeasure measure = ESolidAngle;
@@ -132,7 +133,7 @@ public:
             if (sampled.isZero() && sampled2.isZero())
                 return boost::make_tuple(Vector(0.0f), 0.0f, measure);
 
-            Spectrum f = m_bsdf->eval(bRec, measure);
+            Spectrum f = m_bsdf->envelope(bRec, measure);
             pdfVal = m_bsdf->pdf(bRec, measure);
             Spectrum manual = f/pdfVal;
 
@@ -218,7 +219,7 @@ public:
                 enableFPExceptions();
             #endif
 
-            if (m_bsdf->eval(bRec, measure).isZero())
+            if (m_bsdf->envelope(bRec, measure).isZero())
                 return 0.0f;
 
             Float result = m_bsdf->pdf(bRec, measure);

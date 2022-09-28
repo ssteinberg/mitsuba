@@ -18,6 +18,7 @@
 
 #include <mitsuba/render/scene.h>
 #include <mitsuba/core/warp.h>
+#include <string>
 
 MTS_NAMESPACE_BEGIN
 
@@ -70,12 +71,22 @@ public:
                 Log(EError, "Scale factors in the emitter-to-world "
                     "transformation are not allowed!");
         }
+        
+        m_distance = props.getFloat("distance");
+        m_lightArea = props.getFloat("source_area");
+        
+        Log(EInfo, "Directional emitter --- Transverse coherence length: %.2f um", 
+                    sourceLight().coherenceLength(2*M_PI/.5, { 1,0,0 }, 1));
+        Log(EInfo, "Directional emitter --- Transverse coherence sigma^2: %.3f", 
+                    sourceLight().coherenceSigma2(2*M_PI/.5, { 1,0,0 }, 1));
     }
 
     DirectionalEmitter(Stream *stream, InstanceManager *manager)
      : Emitter(stream, manager) {
         m_normalIrradiance = Spectrum(stream);
         m_bsphere = BSphere(stream);
+        m_distance = stream->readFloat();
+        m_lightArea = stream->readFloat();
         configure();
     }
 
@@ -83,6 +94,8 @@ public:
         Emitter::serialize(stream, manager);
         m_normalIrradiance.serialize(stream);
         m_bsphere.serialize(stream);
+        stream->writeFloat(m_distance);
+        stream->writeFloat(m_lightArea);
     }
 
     ref<Shape> createShape(const Scene *scene) {
@@ -186,6 +199,12 @@ public:
     AABB getAABB() const {
         return AABB();
     }
+    
+    virtual RadiancePacket sourceLight() const override {
+        // VCZ theorem
+        const Float coh0 = sqr(2*M_PI) / m_lightArea;
+        return RadiancePacket{ m_normalIrradiance, coh0, m_distance };
+    }
 
     Shader *createShader(Renderer *renderer) const;
 
@@ -205,6 +224,7 @@ private:
     Spectrum m_normalIrradiance, m_power;
     BSphere m_bsphere;
     Float m_invSurfaceArea;
+    Float m_distance, m_lightArea;
 };
 
 // ================ Hardware shader implementation ================
